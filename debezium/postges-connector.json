@@ -1,0 +1,30 @@
+{
+  "name": "aether-postgres-connector",
+  "config": {
+    "connector.class": "io.debezium.connector.postgresql.PostgresConnector",
+    "tasks.max": "1",
+
+    "database.hostname": "aether_postgres",
+    "database.port": "5432",
+    "database.user": "debezium",
+    "database.password": "debezium",
+    "database.dbname": "indodax",
+    "topic.prefix": "aether",
+    "schema.include.list": "public",
+    "table.include.list": "public.ticker_pepeidr",
+
+    "plugin.name": "pgoutput",
+    "slot.name": "aether_slot",
+    "publication.autocreate.mode": "filtered",
+
+    "tombstones.on.delete": "false",
+    "decimal.handling.mode": "string",
+    "time.precision.mode": "connect",
+
+    "snapshot.mode": "initial",
+    "snapshot.fetch.size": "2000",
+
+    "heartbeat.interval.ms": "10000",
+    "include.schema.changes": "false"
+  }
+}
