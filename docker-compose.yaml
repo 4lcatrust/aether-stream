@@ -90,14 +90,16 @@ services:
 
   flink-jobmanager:
     image: flink:1.19.0-scala_2.12-java11
-    container_name: aether_flink_jobmanager
+    container_name: aether-flink-jobmanager
     command: jobmanager
+    environment:
+      - JOB_MANAGER_RPC_ADDRESS=aether-flink-jobmanager
     ports:
       - "8081:8081"
-    environment:
-      - JOB_MANAGER_RPC_ADDRESS=aether_flink_jobmanager
     volumes:
       - ./flink-jobs:/opt/flink/usrlib
+      - ./flink/conf.yaml:/flink-conf.yaml:ro
+      - ./flink/lib/flink-connector-kafka-3.2.0-1.19.jar:/opt/flink/lib/flink-connector-kafka-3.2.0-1.19.jar:ro
     networks:
       - aether_net
 
@@ -108,9 +110,11 @@ services:
     depends_on:
       - flink-jobmanager
     environment:
-      - JOB_MANAGER_RPC_ADDRESS=aether_flink_jobmanager
+      - JOB_MANAGER_RPC_ADDRESS=aether-flink-jobmanager
     volumes:
       - ./flink-jobs:/opt/flink/usrlib
+      - ./flink/conf.yaml:/flink-conf.yaml:ro
+      - ./flink/lib/flink-connector-kafka-3.2.0-1.19.jar:/opt/flink/lib/flink-connector-kafka-3.2.0-1.19.jar:ro
     networks:
       - aether_net
 
