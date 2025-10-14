@@ -14,10 +14,19 @@ services:
       -c wal_level=logical
       -c max_wal_senders=10
       -c max_replication_slots=10
+      -c app.app_db=${APP_DB}
+      -c app.airflow_db=${AIRFLOW_DB}
+      -c app.debezium_user=${DEBEZIUM_USER}
+      -c app.debezium_password=${DEBEZIUM_PASSWORD}
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./postgres/init.sql:/docker-entrypoint-initdb.d/00-init.sql:ro
-      - ./postgres/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+      - ./postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      - ./postgres/schema.sql:/docker-entrypoint-initdb.d/schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
     ports:
       - "5432:5432"
     networks:
@@ -28,6 +37,11 @@ services:
     container_name: aether_zookeeper
     environment:
       ALLOW_ANONYMOUS_LOGIN: "yes"
+    healthcheck:
+      test: ["CMD", "bash", "-lc", "echo ruok | nc -w 2 localhost 2181 | grep imok"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
     ports:
       - "2181:2181"
     networks:
@@ -42,6 +56,11 @@ services:
       KAFKA_CFG_ZOOKEEPER_CONNECT: aether_zookeeper:2181
       KAFKA_CFG_ADVERTISED_LISTENERS: PLAINTEXT://aether_kafka:9092
       KAFKA_CFG_LISTENERS: PLAINTEXT://0.0.0.0:9092
+    healthcheck:
+      test: ["CMD", "bash", "-lc", "kafka-topics.sh --bootstrap-server localhost:9092 --list >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
     ports:
       - "9092:9092"
     networks:
@@ -93,6 +112,8 @@ services:
   clickhouse:
     image: clickhouse/clickhouse-server:24.8-alpine
     container_name: aether_clickhouse
+    env_file:
+      - .env
     ports:
       - "8123:8123"
       - "9005:9000"
@@ -105,9 +126,13 @@ services:
     image: minio/minio:latest
     container_name: aether_minio
     entrypoint: /bin/bash -c "chmod +x /entrypoint.sh && /entrypoint.sh"
-    environment:
-      MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadmin
+    env_file:
+      - .env
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
     ports:
       - "9000:9000"
       - "9001:9001"
@@ -124,7 +149,10 @@ services:
       - aether_net
 
   airflow-webserver:
-    image: airflow:latest
+    image: local/aether-airflow:2.10.2
+    build:
+      context: ./airflow
+      dockerfile: Dockerfile
     container_name: aether_airflow_webserver
     env_file:
       - .env
@@ -147,7 +175,10 @@ services:
       - aether_net
 
   airflow-scheduler:
-    image: airflow:latest
+    image: local/aether-airflow:2.10.2
+    build:
+      context: ./airflow
+      dockerfile: Dockerfile
     container_name: aether_airflow_scheduler
     env_file:
       - .env
@@ -167,7 +198,10 @@ services:
       - aether_net
 
   airflow-worker:
-    image: airflow:latest
+    image: local/aether-airflow:2.10.2
+    build:
+      context: ./airflow
+      dockerfile: Dockerfile
     container_name: aether_airflow_worker
     env_file:
       - .env
@@ -187,7 +221,10 @@ services:
       - aether_net
 
   airflow-flower:
-    image: airflow:latest
+    image: local/aether-airflow:2.10.2
+    build:
+      context: ./airflow
+      dockerfile: Dockerfile
     container_name: aether_airflow_flower
     env_file:
       - .env
@@ -205,7 +242,10 @@ services:
       - aether_net
 
   airflow-init:
-    image: airflow:latest
+    image: local/aether-airflow:2.10.2
+    build:
+      context: ./airflow
+      dockerfile: Dockerfile
     container_name: aether_airflow_init
     env_file:
       - .env
@@ -222,12 +262,25 @@ services:
   lineage:
     image: marquezproject/marquez:latest
     container_name: aether_lineage
+    depends_on:
+      - postgres
     environment:
-      - MARQUEZ_PORT=5000
+      MARQUEZ_DB_HOST: aether_postgres
+      MARQUEZ_DB_PORT: 5432
+      MARQUEZ_DB: marquez
+      MARQUEZ_DB_USER: marquez
+      MARQUEZ_DB_PASSWORD: marquez
+      MARQUEZ_PORT: 5000
     ports:
       - "5000:5000"
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z localhost 5000"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
     networks:
       - aether_net
+
 
 volumes:
   postgres_data:
