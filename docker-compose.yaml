@@ -290,7 +290,6 @@ services:
     networks:
       - aether_net
 
-
 volumes:
   postgres_data:
   clickhouse_data:
