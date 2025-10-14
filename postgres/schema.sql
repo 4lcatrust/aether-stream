@@ -25,6 +25,26 @@ SELECT
 CREATE SCHEMA IF NOT EXISTS public;
 CREATE SCHEMA IF NOT EXISTS indodax;
 
+DO $$
+DECLARE
+  dbz_user TEXT := COALESCE(current_setting('app.debezium_user', true), 'debezium');
+  public_schema TEXT := 'public';
+  indodax_schema TEXT := 'indodax';
+BEGIN
+  -- grant connect to this DB
+  EXECUTE format('GRANT CONNECT ON DATABASE %I TO %I', current_database(), dbz_user);
+  -- usage on schemas
+  EXECUTE format('GRANT USAGE ON SCHEMA %I TO %I', public_schema, dbz_user);
+  EXECUTE format('GRANT USAGE ON SCHEMA %I TO %I', indodax_schema, dbz_user);
+  -- select on existing tables
+  EXECUTE format('GRANT SELECT ON ALL TABLES IN SCHEMA %I TO %I', public_schema, dbz_user);
+  EXECUTE format('GRANT SELECT ON ALL TABLES IN SCHEMA %I TO %I', indodax_schema, dbz_user);
+
+  -- default privileges for future tables (must be run by the *owner* that will create tables)
+  EXECUTE FORMAT('ALTER DEFAULT PRIVILEGES FOR ROLE %I IN SCHEMA %I GRANT SELECT ON TABLES TO %I', dbz_user, public_schema, dbz_user);
+  EXECUTE FORMAT('ALTER DEFAULT PRIVILEGES FOR ROLE %I IN SCHEMA %I GRANT SELECT ON TABLES TO %I', dbz_user, indodax_schema, dbz_user);
+END$$;
+
 /* Ticker table for Indodax PEPE/IDR market data */
 CREATE TABLE IF NOT EXISTS indodax.ticker_pepeidr (
   id            BIGSERIAL PRIMARY KEY,

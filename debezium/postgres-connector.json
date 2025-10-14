@@ -4,17 +4,18 @@
     "connector.class": "io.debezium.connector.postgresql.PostgresConnector",
     "tasks.max": "1",
 
-    "database.hostname": "aether_postgres",
-    "database.port": "5432",
-    "database.user": "debezium",
-    "database.password": "debezium",
-    "database.dbname": "indodax",
-    "topic.prefix": "aether",
-    "schema.include.list": "public",
-    "table.include.list": "public.ticker_pepeidr",
+    "database.hostname": "${env:POSTGRES_HOST}",
+    "database.port":     "${env:POSTGRES_PORT}",
+    "database.user":     "${env:DEBEZIUM_USER}",
+    "database.password": "${env:DEBEZIUM_PASSWORD}",
+    "database.dbname":   "${env:APP_DB}",
+
+    "topic.prefix":        "${env:DEBEZIUM_TOPIC_PREFIX}",
+    "schema.include.list": "${env:DEBEZIUM_SCHEMA_INCLUDE}",
+    "table.include.list":  "${env:DEBEZIUM_TABLE_INCLUDE}",
 
     "plugin.name": "pgoutput",
-    "slot.name": "aether_slot",
+    "slot.name":   "${env:DEBEZIUM_SLOT}",
     "publication.autocreate.mode": "filtered",
 
     "tombstones.on.delete": "false",
