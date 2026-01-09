@@ -118,3 +118,20 @@ services:
     entrypoint: ["/bin/sh", "/debezium/init.sh"]
     networks:
       - aether-net
+
+  flink-bronze-market-prices:
+    build:
+      context: ./flink/bronze
+      dockerfile: Dockerfile
+    image: aether-flink-bronze-market-prices:latest
+    container_name: aether-flink-bronze-market-prices
+    depends_on:
+      - kafka
+    command: >
+      flink run
+      -c com.aetherstream.bronze.MarketPriceBronzeJob
+      /opt/flink/jobs/market-price-bronze.jar
+    volumes:
+      - ./data/bronze:/tmp/bronze
+    networks:
+      - aether-net
