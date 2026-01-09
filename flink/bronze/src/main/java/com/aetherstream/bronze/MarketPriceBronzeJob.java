@@ -36,17 +36,18 @@ public class MarketPriceBronzeJob {
                 )
                 .build();
 
-        DataStream<MarketPriceBronze> bronze =
-            env.fromSource(source, WatermarkStrategy.noWatermarks(), "kafka-cdc")
-               .map(DebeziumParser::parse)
-               .filter(e -> e != null);
+        DataStream<String> bronze =
+        env.fromSource(source, WatermarkStrategy.noWatermarks(), "kafka-cdc")
+            .map(DebeziumParser::parse)
+            .filter(e -> e != null)
+            .map(e -> e.toJson());
 
         // ===== Bronze Sink (Filesystem / MinIO later)
-        FileSink<MarketPriceBronze> sink =
+        FileSink<String> sink =
             FileSink
                 .forRowFormat(
                     new Path("file:///tmp/bronze/market_prices"),
-                    new org.apache.flink.formats.json.JsonEncoder<MarketPriceBronze>()
+                    new SimpleStringEncoder<>("UTF-8")
                 )
                 .build();
 
