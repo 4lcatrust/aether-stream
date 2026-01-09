@@ -2,6 +2,7 @@ package com.aetherstream.bronze;
 
 import com.aetherstream.bronze.model.MarketPriceBronze;
 import com.aetherstream.bronze.util.DebeziumParser;
+import org.apache.flink.api.common.serialization.SimpleStringEncoder;
 import org.apache.flink.api.common.eventtime.WatermarkStrategy;
 import org.apache.flink.connector.file.sink.FileSink;
 import org.apache.flink.connector.kafka.source.KafkaSource;
@@ -44,8 +45,7 @@ public class MarketPriceBronzeJob {
 
         // ===== Bronze Sink (Filesystem / MinIO later)
         FileSink<String> sink =
-            FileSink
-                .forRowFormat(
+            FileSink.<String>forRowFormat(
                     new Path("file:///tmp/bronze/market_prices"),
                     new SimpleStringEncoder<>("UTF-8")
                 )
