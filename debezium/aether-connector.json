@@ -1,0 +1,33 @@
+{
+  "connector.class": "io.debezium.connector.postgresql.PostgresConnector",
+  "tasks.max": "1",
+
+  "database.hostname": "postgres",
+  "database.port": "5432",
+  "database.user": "aether",
+  "database.password": "aether",
+  "database.dbname": "aether",
+
+  "topic.prefix": "aether_pg",
+
+  "plugin.name": "pgoutput",
+
+  "slot.name": "aether_market_slot",
+  "publication.name": "aether_market_pub",
+  "publication.autocreate.mode": "filtered",
+
+  "schema.include.list": "public",
+  "table.include.list": "public.market_prices,public.market_caps",
+
+  "snapshot.mode": "initial",
+
+  "key.converter": "org.apache.kafka.connect.json.JsonConverter",
+  "value.converter": "org.apache.kafka.connect.json.JsonConverter",
+  "key.converter.schemas.enable": "false",
+  "value.converter.schemas.enable": "false",
+
+  "decimal.handling.mode": "string",
+  "time.precision.mode": "connect",
+
+  "tombstones.on.delete": "false"
+}

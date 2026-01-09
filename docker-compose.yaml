@@ -1,300 +1,120 @@
-version: "3.9"
-
-services:
-  postgres:
-    image: postgres:17-alpine
-    container_name: aether_postgres
-    env_file:
-      - .env
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_DB: ${POSTGRES_DB}
-    command: >
-      -c wal_level=logical
-      -c max_wal_senders=10
-      -c max_replication_slots=10
-      -c app.app_db=${APP_DB}
-      -c app.airflow_db=${AIRFLOW_DB}
-      -c app.debezium_user=${DEBEZIUM_USER}
-      -c app.debezium_password=${DEBEZIUM_PASSWORD}
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-      - ./postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
-      - ./postgres/schema.sql:/docker-entrypoint-initdb.d/schema.sql:ro
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
-      interval: 5s
-      timeout: 3s
-      retries: 20
-    ports:
-      - "5432:5432"
-    networks:
-      - aether_net
-
-  zookeeper:
-    image: bitnami/zookeeper:3.9.2
-    container_name: aether_zookeeper
-    environment:
-      ALLOW_ANONYMOUS_LOGIN: "yes"
-    healthcheck:
-      test: ["CMD", "bash", "-lc", "echo ruok | nc -w 2 localhost 2181 | grep imok"]
-      interval: 5s
-      timeout: 3s
-      retries: 20
-    ports:
-      - "2181:2181"
-    networks:
-      - aether_net
-
-  kafka:
-    image: bitnami/kafka:3.7.0
-    container_name: aether_kafka
-    depends_on:
-      - zookeeper
-    environment:
-      KAFKA_CFG_BROKER_ID: "1"
-      KAFKA_CFG_ZOOKEEPER_CONNECT: aether_zookeeper:2181
-      KAFKA_CFG_LISTENERS: PLAINTEXT://0.0.0.0:9092,EXTERNAL://0.0.0.0:9093
-      KAFKA_CFG_ADVERTISED_LISTENERS: PLAINTEXT://aether_kafka:9092,EXTERNAL://localhost:9093
-      KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,EXTERNAL:PLAINTEXT
-      KAFKA_CFG_INTER_BROKER_LISTENER_NAME: PLAINTEXT
-      ALLOW_PLAINTEXT_LISTENER: "yes"
-    healthcheck:
-      test: ["CMD", "bash", "-lc", "kafka-topics.sh --bootstrap-server localhost:9092 --list >/dev/null 2>&1"]
-      interval: 10s
-      timeout: 5s
-      retries: 30
-    ports:
-    - "9092:9092"  # internal for containers
-    - "9093:9093"  # external for host tools
-    networks:
-      - aether_net
-
-  debezium:
-    image: debezium/connect:2.7.2.Final
-    container_name: aether_debezium
-    depends_on:
-      - kafka
-      - postgres
-    environment:
-      BOOTSTRAP_SERVERS: aether_kafka:9092
-      GROUP_ID: 1
-      CONFIG_STORAGE_TOPIC: debezium_configs
-      OFFSET_STORAGE_TOPIC: debezium_offsets
-      STATUS_STORAGE_TOPIC: debezium_status
-    ports:
-      - "8083:8083"
-    networks:
-      - aether_net
-
-  flink-jobmanager:
-    image: flink:1.19.0-scala_2.12-java11
-    container_name: aether-flink-jobmanager
-    command: jobmanager
-    environment:
-      - JOB_MANAGER_RPC_ADDRESS=aether-flink-jobmanager
-    ports:
-      - "8081:8081"
-    volumes:
-      - ./flink-jobs:/opt/flink/usrlib
-      - ./flink/conf.yaml:/flink-conf.yaml:ro
-      - ./flink/lib/flink-connector-kafka-3.2.0-1.19.jar:/opt/flink/lib/flink-connector-kafka-3.2.0-1.19.jar:ro
-    networks:
-      - aether_net
-
-  flink-taskmanager:
-    image: flink:1.19.0-scala_2.12-java11
-    container_name: aether_flink_taskmanager
-    command: taskmanager
-    depends_on:
-      - flink-jobmanager
-    environment:
-      - JOB_MANAGER_RPC_ADDRESS=aether-flink-jobmanager
-    volumes:
-      - ./flink-jobs:/opt/flink/usrlib
-      - ./flink/conf.yaml:/flink-conf.yaml:ro
-      - ./flink/lib/flink-connector-kafka-3.2.0-1.19.jar:/opt/flink/lib/flink-connector-kafka-3.2.0-1.19.jar:ro
-    networks:
-      - aether_net
-
-  clickhouse:
-    image: clickhouse/clickhouse-server:24.8-alpine
-    container_name: aether_clickhouse
-    env_file:
-      - .env
-    ports:
-      - "8123:8123"
-      - "9005:9000"
-    volumes:
-      - clickhouse_data:/var/lib/clickhouse
-    networks:
-      - aether_net
-
-  minio:
-    image: minio/minio:latest
-    container_name: aether_minio
-    entrypoint: /bin/bash -c "chmod +x /entrypoint.sh && /entrypoint.sh"
-    env_file:
-      - .env
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
-      interval: 5s
-      timeout: 3s
-      retries: 30
-    ports:
-      - "9000:9000"
-      - "9001:9001"
-    volumes:
-      - ./minio/data:/data
-      - ./minio/init.sh:/entrypoint.sh
-    networks:
-      - aether_net
-
-  redis:
-    image: redis:alpine
-    container_name: aether_redis
-    networks:
-      - aether_net
-
-  airflow-webserver:
-    image: local/aether-airflow:2.10.2
-    build:
-      context: ./airflow
-      dockerfile: Dockerfile
-    container_name: aether_airflow_webserver
-    env_file:
-      - .env
-    depends_on:
-      - postgres
-      - redis
-    environment:
-      AIRFLOW__CORE__EXECUTOR: CeleryExecutor
-      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
-      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@aether_postgres:5432/${AIRFLOW_DB}
-      AIRFLOW__CELERY__BROKER_URL: redis://aether_redis:6379/0
-      AIRFLOW__CELERY__RESULT_BACKEND: db+postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@aether_postgres:5432/${AIRFLOW_DB}
-    command: webserver
-    volumes:
-      - ./dags:/opt/airflow/dags
-      - ./airflow/requirements.txt:/opt/airflow/requirements.txt:ro
-    ports:
-      - "8080:8080"
-    networks:
-      - aether_net
-
-  airflow-scheduler:
-    image: local/aether-airflow:2.10.2
-    build:
-      context: ./airflow
-      dockerfile: Dockerfile
-    container_name: aether_airflow_scheduler
-    env_file:
-      - .env
-    depends_on:
-      - postgres
-      - redis
-    environment:
-      AIRFLOW__CORE__EXECUTOR: CeleryExecutor
-      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@aether_postgres:5432/${AIRFLOW_DB}
-      AIRFLOW__CELERY__BROKER_URL: redis://aether_redis:6379/0
-      AIRFLOW__CELERY__RESULT_BACKEND: db+postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@aether_postgres:5432/${AIRFLOW_DB}
-    command: scheduler
-    volumes:
-      - ./dags:/opt/airflow/dags
-      - ./airflow/requirements.txt:/opt/airflow/requirements.txt:ro
-    networks:
-      - aether_net
-
-  airflow-worker:
-    image: local/aether-airflow:2.10.2
-    build:
-      context: ./airflow
-      dockerfile: Dockerfile
-    container_name: aether_airflow_worker
-    env_file:
-      - .env
-    depends_on:
-      - postgres
-      - redis
-    environment:
-      AIRFLOW__CORE__EXECUTOR: CeleryExecutor
-      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@aether_postgres:5432/${AIRFLOW_DB}
-      AIRFLOW__CELERY__BROKER_URL: redis://aether_redis:6379/0
-      AIRFLOW__CELERY__RESULT_BACKEND: db+postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@aether_postgres:5432/${AIRFLOW_DB}
-    command: celery worker
-    volumes:
-      - ./dags:/opt/airflow/dags
-      - ./airflow/requirements.txt:/opt/airflow/requirements.txt:ro
-    networks:
-      - aether_net
-
-  airflow-flower:
-    image: local/aether-airflow:2.10.2
-    build:
-      context: ./airflow
-      dockerfile: Dockerfile
-    container_name: aether_airflow_flower
-    env_file:
-      - .env
-    depends_on:
-      - redis
-    environment:
-      AIRFLOW__CORE__EXECUTOR: CeleryExecutor
-      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@aether_postgres:5432/${AIRFLOW_DB}
-      AIRFLOW__CELERY__BROKER_URL: redis://aether_redis:6379/0
-      AIRFLOW__CELERY__RESULT_BACKEND: db+postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@aether_postgres:5432/${AIRFLOW_DB}
-    command: celery flower
-    ports:
-      - "5555:5555"
-    networks:
-      - aether_net
-
-  airflow-init:
-    image: local/aether-airflow:2.10.2
-    build:
-      context: ./airflow
-      dockerfile: Dockerfile
-    container_name: aether_airflow_init
-    env_file:
-      - .env
-    depends_on:
-      - postgres
-      - redis
-    entrypoint: >
-      bash -c "airflow db init &&
-              airflow users create --username admin --password admin
-              --firstname Admin --lastname User --role Admin --email admin@example.com"
-    networks:
-      - aether_net
-
-  lineage:
-    image: marquezproject/marquez:latest
-    container_name: aether_lineage
-    depends_on:
-      - postgres
-    environment:
-      MARQUEZ_DB_HOST: aether_postgres
-      MARQUEZ_DB_PORT: 5432
-      MARQUEZ_DB: marquez
-      MARQUEZ_DB_USER: marquez
-      MARQUEZ_DB_PASSWORD: marquez
-      MARQUEZ_PORT: 5000
-    ports:
-      - "5000:5000"
-    healthcheck:
-      test: ["CMD-SHELL", "nc -z localhost 5000"]
-      interval: 5s
-      timeout: 3s
-      retries: 30
-    networks:
-      - aether_net
+networks:
+  aether-net:
+    driver: bridge
 
 volumes:
   postgres_data:
-  clickhouse_data:
-  minio_data:
+  kafka_data:
 
-networks:
-  aether_net:
-    driver: bridge
+services:
+
+  # ============================
+  # PostgreSQL (CDC Source)
+  # ============================
+  postgres:
+    image: postgres:15-alpine
+    container_name: aether-postgres
+    hostname: postgres
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: aether
+      POSTGRES_USER: aether
+      POSTGRES_PASSWORD: aether
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./postgres:/docker-entrypoint-initdb.d
+    command:
+      - "postgres"
+      - "-c"
+      - "wal_level=logical"
+      - "-c"
+      - "max_replication_slots=10"
+      - "-c"
+      - "max_wal_senders=10"
+    networks:
+      - aether-net
+
+  # ============================
+  # Zookeeper
+  # ============================
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.6.1
+    container_name: aether-zookeeper
+    hostname: zookeeper
+    ports:
+      - "2181:2181"
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    networks:
+      - aether-net
+
+  # ============================
+  # Kafka Broker
+  # ============================
+  kafka:
+    image: confluentinc/cp-kafka:7.6.1
+    container_name: aether-kafka
+    hostname: kafka
+    depends_on:
+      - zookeeper
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+    volumes:
+      - kafka_data:/var/lib/kafka/data
+    networks:
+      - aether-net
+
+  # ============================
+  # Kafka Connect (Debezium)
+  # ============================
+  kafka-connect:
+    image: debezium/connect:2.6
+    container_name: aether-kafka-connect
+    hostname: kafka-connect
+    depends_on:
+      - kafka
+      - postgres
+    ports:
+      - "8083:8083"
+    environment:
+      BOOTSTRAP_SERVERS: kafka:9092
+      GROUP_ID: aether-connect
+
+      CONFIG_STORAGE_TOPIC: _connect_configs
+      OFFSET_STORAGE_TOPIC: _connect_offsets
+      STATUS_STORAGE_TOPIC: _connect_statuses
+
+      KEY_CONVERTER: org.apache.kafka.connect.json.JsonConverter
+      VALUE_CONVERTER: org.apache.kafka.connect.json.JsonConverter
+      KEY_CONVERTER_SCHEMAS_ENABLE: "false"
+      VALUE_CONVERTER_SCHEMAS_ENABLE: "false"
+
+      PLUGIN_PATH: /kafka/connect,/kafka/connect/debezium
+    networks:
+      - aether-net
+
+  # ============================
+  # Debezium Connector Init
+  # ============================
+  connect-init:
+    image: curlimages/curl:8.6.0
+    container_name: aether-connect-init
+    depends_on:
+      - kafka-connect
+    volumes:
+      - ./debezium:/debezium:ro
+    entrypoint: ["/bin/sh", "/debezium/init.sh"]
+    networks:
+      - aether-net
