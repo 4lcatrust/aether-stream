@@ -5,7 +5,7 @@ flowchart LR
   A[Indodax API] -->|write to| B[(Postgres)]
   B -->|CDC| C[Debezium Connector]
   C -->|events| D[(Kafka)]
-  D --> E[Flink - stream processing]
+  D --> E[Flink - DataStream]
   E -->|checks| F[Great Expectations - DQ validation]
   E -->|lineage| G[OpenLineage]
   E -->|sink 1| H[(ClickHouse)]
