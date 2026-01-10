@@ -47,6 +47,20 @@
       <scope>provided</scope>
     </dependency>
 
+    <!-- Delta Lake Flink Sink -->
+    <dependency>
+      <groupId>io.delta</groupId>
+      <artifactId>delta-flink</artifactId>
+      <version>3.1.0</version>
+    </dependency>
+
+    <!-- Hadoop S3 support (MinIO) -->
+    <dependency>
+      <groupId>org.apache.hadoop</groupId>
+      <artifactId>hadoop-aws</artifactId>
+      <version>3.3.4</version>
+    </dependency>
+
     <!-- Jackson -->
     <dependency>
       <groupId>com.fasterxml.jackson.core</groupId>
