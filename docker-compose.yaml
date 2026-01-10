@@ -126,12 +126,43 @@ services:
     image: aether-flink-bronze-market-prices:latest
     container_name: aether-flink-bronze-market-prices
     depends_on:
+      - flink-jobmanager
       - kafka
     command: >
       flink run
+      -m flink-jobmanager:8081
       -c com.aetherstream.bronze.MarketPriceBronzeJob
       /opt/flink/jobs/market-price-bronze.jar
     volumes:
       - ./data/bronze:/tmp/bronze
+    networks:
+      - aether-net
+
+  flink-jobmanager:
+    image: flink:1.18-java17
+    container_name: aether-flink-jobmanager
+    hostname: flink-jobmanager
+    ports:
+      - "8081:8081"
+    command: jobmanager
+    environment:
+      - |
+        FLINK_PROPERTIES=
+        jobmanager.rpc.address: flink-jobmanager
+    networks:
+      - aether-net
+
+  flink-taskmanager:
+    image: flink:1.18-java17
+    container_name: aether-flink-taskmanager
+    hostname: flink-taskmanager
+    depends_on:
+      - flink-jobmanager
+    command: taskmanager
+    environment:
+      - |
+        FLINK_PROPERTIES=
+        jobmanager.rpc.address: flink-jobmanager
+        taskmanager.numberOfTaskSlots: 4
     networks:
       - aether-net

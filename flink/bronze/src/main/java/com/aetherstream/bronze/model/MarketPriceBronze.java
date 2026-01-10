@@ -20,10 +20,6 @@ public class MarketPriceBronze implements Serializable {
     public String op;
     public Long lsn;
 
-    /**
-     * Serialize this Bronze event as JSON.
-     * This is the canonical Bronze output format.
-     */
     public String toJson() {
         try {
             return MAPPER.writeValueAsString(this);
@@ -32,10 +28,6 @@ public class MarketPriceBronze implements Serializable {
         }
     }
 
-    /**
-     * Human-readable representation (debugging only).
-     * Do NOT use as a sink format.
-     */
     @Override
     public String toString() {
         return String.format(
