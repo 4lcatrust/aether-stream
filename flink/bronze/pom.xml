@@ -89,14 +89,6 @@
             <configuration>
               <createDependencyReducedPom>false</createDependencyReducedPom>
 
-              <!-- FORCE Kafka connector inclusion -->
-              <artifactSet>
-                <includes>
-                  <include>org.apache.flink:flink-connector-kafka</include>
-                  <include>org.apache.kafka:*</include>
-                </includes>
-              </artifactSet>
-
               <filters>
                 <filter>
                   <artifact>*:*</artifact>

@@ -22,4 +22,4 @@ FROM flink:1.18-java17
 
 WORKDIR /opt/flink/jobs
 
-COPY --from=builder /build/target/*.jar ./market-price-bronze.jar
+COPY --from=builder /build/target/flink-bronze-*.jar ./market-price-bronze.jar
