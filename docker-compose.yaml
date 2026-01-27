@@ -175,6 +175,11 @@ services:
     networks:
       - aether-net
 
+  flink-base:
+    build:
+      context: ./flink/base
+      dockerfile: Dockerfile
+    image: aether-flink:1.18-s3
 
   flink-jobmanager:
     image: aether-flink:1.18-s3
