@@ -25,10 +25,10 @@ public class MarketPriceBronzeJob {
             StreamExecutionEnvironment.getExecutionEnvironment();
 
         // ===== Checkpointing (EXACTLY ONCE)
-        env.enableCheckpointing(60_000);
+        env.enableCheckpointing(30_000);
+        env.getCheckpointConfig().setMinPauseBetweenCheckpoints(15_000);
+        env.getCheckpointConfig().setCheckpointTimeout(120_000);
         env.getCheckpointConfig().setCheckpointingMode(CheckpointingMode.EXACTLY_ONCE);
-        env.getCheckpointConfig().setMinPauseBetweenCheckpoints(10_000);
-        env.getCheckpointConfig().setCheckpointTimeout(60_000);
         env.getCheckpointConfig().setMaxConcurrentCheckpoints(1);
         env.getCheckpointConfig().setCheckpointStorage(
             "s3a://bronze/_checkpoints/market_prices"
@@ -77,6 +77,6 @@ public class MarketPriceBronzeJob {
 
         bronzeOut.sinkTo(sink);
 
-        env.execute("AetherStream Bronze – Market Prices");
+        env.execute("AetherStream Bronze: Market Prices");
     }
 }
