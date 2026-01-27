@@ -76,6 +76,26 @@ services:
     networks:
       - aether-net
 
+  kafka-init:
+    image: confluentinc/cp-kafka:7.6.1
+    container_name: aether-kafka-init
+    depends_on:
+      - kafka
+    entrypoint: >
+      /bin/sh -c "
+      echo 'Waiting for Kafka...';
+      cub kafka-ready -b kafka:9092 1 30 &&
+      kafka-topics --bootstrap-server kafka:9092
+        --create
+        --if-not-exists
+        --topic aether_pg.public.market_prices
+        --partitions 1
+        --replication-factor 1
+      "
+    networks:
+      - aether-net
+
+
   # ============================
   # Kafka Connect (Debezium)
   # ============================
@@ -132,14 +152,32 @@ services:
     environment:
       MINIO_ROOT_USER: minioadmin
       MINIO_ROOT_PASSWORD: minioadmin
-    command: server /data --console-address ":9001"
+    command: server /data --address ":9000" --console-address ":9001"
     volumes:
       - ./data/minio:/data
     networks:
       - aether-net
 
+  minio-init:
+    image: minio/mc
+    container_name: aether-minio-init
+    depends_on:
+      - minio
+    entrypoint: >
+      /bin/sh -c "
+      until mc alias set local http://minio:9000 minioadmin minioadmin; do
+        echo 'Waiting for MinIO...';
+        sleep 2;
+      done;
+      mc mb --ignore-existing local/bronze;
+      echo 'MinIO buckets ready';
+      "
+    networks:
+      - aether-net
+
+
   flink-jobmanager:
-    image: flink:1.18-java17
+    image: aether-flink:1.18-s3
     container_name: aether-flink-jobmanager
     hostname: flink-jobmanager
     ports:
@@ -158,7 +196,7 @@ services:
       - aether-net
 
   flink-taskmanager:
-    image: flink:1.18-java17
+    image: aether-flink:1.18-s3
     container_name: aether-flink-taskmanager
     hostname: flink-taskmanager
     depends_on:

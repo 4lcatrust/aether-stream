@@ -1,8 +1,7 @@
 <project xmlns="http://maven.apache.org/POM/4.0.0"
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-         xsi:schemaLocation="
-           http://maven.apache.org/POM/4.0.0
-           http://maven.apache.org/xsd/maven-4.0.0.xsd">
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
+                             http://maven.apache.org/xsd/maven-4.0.0.xsd">
 
   <modelVersion>4.0.0</modelVersion>
 
@@ -11,13 +10,21 @@
   <version>0.1.0</version>
   <packaging>jar</packaging>
 
+  <!-- ===================================================== -->
+  <!-- Properties -->
+  <!-- ===================================================== -->
   <properties>
-    <flink.version>1.18.0</flink.version>
     <java.version>17</java.version>
+    <flink.version>1.18.0</flink.version>
+    <hadoop.version>3.3.4</hadoop.version>
   </properties>
 
+  <!-- ===================================================== -->
+  <!-- Dependencies -->
+  <!-- ===================================================== -->
   <dependencies>
-    <!-- Flink core -->
+
+    <!-- ================= Flink Core (provided) ================= -->
     <dependency>
       <groupId>org.apache.flink</groupId>
       <artifactId>flink-streaming-java</artifactId>
@@ -32,14 +39,14 @@
       <scope>provided</scope>
     </dependency>
 
-    <!-- Kafka connector -->
+    <!-- ================= Kafka Source (MUST be shaded) ================= -->
     <dependency>
       <groupId>org.apache.flink</groupId>
       <artifactId>flink-connector-kafka</artifactId>
       <version>3.1.0-1.18</version>
     </dependency>
 
-    <!-- File sink -->
+    <!-- ================= File Sink API (provided) ================= -->
     <dependency>
       <groupId>org.apache.flink</groupId>
       <artifactId>flink-connector-files</artifactId>
@@ -47,44 +54,48 @@
       <scope>provided</scope>
     </dependency>
 
-    <!-- Delta Lake Flink Sink -->
-    <dependency>
-      <groupId>io.delta</groupId>
-      <artifactId>delta-flink</artifactId>
-      <version>3.1.0</version>
-    </dependency>
-
-    <!-- Hadoop S3 support (MinIO) -->
+    <!-- ================= S3A Client (runtime, NOT shaded) ================= -->
     <dependency>
       <groupId>org.apache.hadoop</groupId>
       <artifactId>hadoop-aws</artifactId>
-      <version>3.3.4</version>
+      <version>${hadoop.version}</version>
+      <scope>provided</scope>
     </dependency>
 
-    <!-- Jackson -->
+    <!-- ================= JSON ================= -->
     <dependency>
       <groupId>com.fasterxml.jackson.core</groupId>
       <artifactId>jackson-databind</artifactId>
       <version>2.16.1</version>
     </dependency>
-    
+
     <dependency>
       <groupId>com.fasterxml.jackson.datatype</groupId>
       <artifactId>jackson-datatype-jsr310</artifactId>
       <version>2.16.1</version>
     </dependency>
 
-    <!-- Logging -->
+    <!-- ================= Logging (provided by Flink) ================= -->
     <dependency>
       <groupId>org.slf4j</groupId>
-      <artifactId>slf4j-simple</artifactId>
+      <artifactId>slf4j-api</artifactId>
       <version>2.0.9</version>
       <scope>provided</scope>
     </dependency>
+
   </dependencies>
 
+  <!-- ===================================================== -->
+  <!-- Build -->
+  <!-- ===================================================== -->
   <build>
+
+    <!-- SINGLE deterministic output -->
+    <finalName>market-price-bronze</finalName>
+
     <plugins>
+
+      <!-- Java 17 -->
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-compiler-plugin</artifactId>
@@ -95,11 +106,13 @@
         </configuration>
       </plugin>
 
-      <!-- Fat JAR -->
+      <!-- ================================================= -->
+      <!-- SHADED JAR (ONLY Kafka + App code) -->
+      <!-- ================================================= -->
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-shade-plugin</artifactId>
-        <version>3.5.1</version>
+        <version>3.5.0</version>
         <executions>
           <execution>
             <phase>package</phase>
@@ -107,8 +120,11 @@
               <goal>shade</goal>
             </goals>
             <configuration>
+
+              <!-- DO NOT create dependency-reduced POM -->
               <createDependencyReducedPom>false</createDependencyReducedPom>
 
+              <!-- Avoid META-INF signature conflicts -->
               <filters>
                 <filter>
                   <artifact>*:*</artifact>
@@ -120,15 +136,19 @@
                 </filter>
               </filters>
 
+              <!-- Entry point -->
               <transformers>
                 <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
                   <mainClass>com.aetherstream.bronze.MarketPriceBronzeJob</mainClass>
                 </transformer>
               </transformers>
+
             </configuration>
           </execution>
         </executions>
       </plugin>
+
     </plugins>
   </build>
+
 </project>

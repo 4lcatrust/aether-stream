@@ -1,3 +1,4 @@
+data/minio/.minio.sys/*
 logs/
 logs/dag_processor_manager/*.log
 .log

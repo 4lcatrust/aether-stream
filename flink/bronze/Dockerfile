@@ -1,25 +1,21 @@
 # ============================================================
-# Stage 1 — Build Flink Job (inside container)
+# Stage 1 — Build Flink Job
 # ============================================================
 FROM maven:3.9.9-eclipse-temurin-17 AS builder
 
 WORKDIR /build
 
-# Cache dependencies
 COPY pom.xml .
 RUN mvn -B -q dependency:go-offline
 
-# Copy source
 COPY src ./src
-
-# Build fat jar
 RUN mvn -B -q clean package -DskipTests
 
 # ============================================================
-# Stage 2 — Flink Runtime
+# Stage 2 — Runtime (MUST match JM / TM)
 # ============================================================
-FROM flink:1.18-java17
+FROM aether-flink:1.18-s3
 
 WORKDIR /opt/flink/jobs
 
-COPY --from=builder /build/target/flink-bronze-*.jar ./market-price-bronze.jar
+COPY --from=builder /build/target/market-price-bronze.jar ./market-price-bronze.jar
