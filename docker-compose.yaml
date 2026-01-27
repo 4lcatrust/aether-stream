@@ -84,17 +84,12 @@ services:
     entrypoint: >
       /bin/sh -c "
       echo 'Waiting for Kafka...';
-      cub kafka-ready -b kafka:9092 1 30 &&
-      kafka-topics --bootstrap-server kafka:9092
-        --create
-        --if-not-exists
-        --topic aether_pg.public.market_prices
-        --partitions 1
-        --replication-factor 1
+      cub kafka-ready -b kafka:9092 1 30;
+      kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic aether_pg.public.market_prices --partitions 1 --replication-factor 1;
+      echo 'Topic ready';
       "
     networks:
       - aether-net
-
 
   # ============================
   # Kafka Connect (Debezium)
