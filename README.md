@@ -18,6 +18,6 @@ flowchart LR
   K --> I
 ```
 
-`sudo docker compose build flink-base`
-`sudo docker compose build flink-bronze-market-prices`
-`sudo docker compose up -d`
+- `sudo docker compose build flink-base`
+- `sudo docker compose build flink-bronze-market-prices`
+- `sudo docker compose up -d`
