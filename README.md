@@ -2,7 +2,7 @@
 
 ```mermaid
 flowchart LR
-  A[Indodax API] -->|write to| B[(Postgres)]
+  A[CoinGecko API] -->|write to| B[(Postgres)]
   B -->|CDC| C[Debezium Connector]
   C -->|events| D[(Kafka)]
   D --> E[Flink - DataStream]
