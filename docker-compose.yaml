@@ -189,8 +189,6 @@ services:
         sleep 2;
       done;
       mc mb --ignore-existing local/bronze;
-      mc mb --ignore-existing local/flink-checkpoints;
-      mc mb --ignore-existing local/flink-savepoints;
       echo 'MinIO buckets ready';
       "
     networks:
