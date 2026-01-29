@@ -71,6 +71,11 @@ services:
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
       KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+    healthcheck:
+      test: ["CMD", "bash", "-lc", "kafka-broker-api-versions --bootstrap-server kafka:9092 >/dev/null 2>&1"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
     volumes:
       - kafka_data:/var/lib/kafka/data
     networks:
@@ -80,7 +85,8 @@ services:
     image: confluentinc/cp-kafka:7.6.1
     container_name: aether-kafka-init
     depends_on:
-      - kafka
+      kafka:
+        condition: service_healthy
     entrypoint: >
       /bin/sh -c "
       echo 'Waiting for Kafka...';
@@ -117,6 +123,11 @@ services:
       VALUE_CONVERTER_SCHEMAS_ENABLE: "false"
 
       PLUGIN_PATH: /kafka/connect,/kafka/connect/debezium
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8083/connectors"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
     networks:
       - aether-net
 
@@ -127,7 +138,8 @@ services:
     image: curlimages/curl:8.6.0
     container_name: aether-connect-init
     depends_on:
-      - kafka-connect
+      kafka-connect:
+        condition: service_healthy
     volumes:
       - ./debezium:/debezium:ro
     entrypoint: ["/bin/sh", "/debezium/init.sh"]
@@ -224,6 +236,7 @@ services:
     depends_on:
       - flink-jobmanager
       - kafka
+      - kafka-init
     command: >
       flink run
       -m flink-jobmanager:8081

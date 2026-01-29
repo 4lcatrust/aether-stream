@@ -1,3 +1,4 @@
+.mc
 data/minio/.minio.sys/*
 data/minio/bronze/*
 logs/
