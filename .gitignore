@@ -1,6 +1,11 @@
 .mc
 data/minio/.minio.sys/*
 data/minio/bronze/*
+data/minio/flink-*/*
+flink/bronze/target/classes
+flink/bronze/target/generated-sources
+flink/bronze/target/maven-archiver
+flink/bronze/target/maven-status
 logs/
 logs/dag_processor_manager/*.log
 .log

@@ -1,6 +1,6 @@
 package com.aetherstream.bronze.model;
 /**
- * Lossless CDC Bronze model for public.market_prices.
+ * Lossless CDC Bronze model for public.market_caps.
  *
  * Guarantees:
  * - Mirrors ALL source columns
@@ -15,7 +15,7 @@ import java.io.Serializable;
 import java.math.BigDecimal;
 import java.time.Instant;
 
-public class MarketPriceBronze implements Serializable {
+public class MarketCapBronze implements Serializable {
     private static final long serialVersionUID = 1L;
     private static final ObjectMapper MAPPER = new ObjectMapper()
             .registerModule(new JavaTimeModule())
@@ -25,10 +25,10 @@ public class MarketPriceBronze implements Serializable {
     public String symbol;
     public String coinName;
     public String currency;
-    public BigDecimal price;
     public BigDecimal marketCap;
-    public BigDecimal volume24h;
-    public String coinImage;
+    public BigDecimal circulatingSupply;
+    public BigDecimal totalSupply;
+    public BigDecimal maxSupply;
     public Long eventTimeMs;
     public Long sourceTsMs;
     public Long createdAtMs;
@@ -44,7 +44,7 @@ public class MarketPriceBronze implements Serializable {
     public String ingestionDate; // yyyy-MM-dd
     public String ingestionHour; // HH
 
-    public MarketPriceBronze() {}
+    public MarketCapBronze() {}
     public static Long toMillis(Instant ts) {
         return ts == null ? null : ts.toEpochMilli();
     }
@@ -52,7 +52,7 @@ public class MarketPriceBronze implements Serializable {
         try {
             return MAPPER.writeValueAsString(this);
         } catch (Exception e) {
-            throw new RuntimeException("Failed to serialize MarketPriceBronze", e);
+            throw new RuntimeException("Failed to serialize MarketCapBronze", e);
         }
     }
 }

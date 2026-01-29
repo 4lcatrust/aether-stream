@@ -18,4 +18,4 @@ FROM aether-flink:1.18-s3
 
 WORKDIR /opt/flink/jobs
 
-COPY --from=builder /build/target/market-price-bronze.jar ./market-price-bronze.jar
+COPY --from=builder /build/target/bronze-jobs.jar ./bronze-jobs.jar

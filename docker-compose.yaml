@@ -189,6 +189,8 @@ services:
         sleep 2;
       done;
       mc mb --ignore-existing local/bronze;
+      mc mb --ignore-existing local/flink-checkpoints;
+      mc mb --ignore-existing local/flink-savepoints;
       echo 'MinIO buckets ready';
       "
     networks:
@@ -199,6 +201,12 @@ services:
       context: ./flink/base
       dockerfile: Dockerfile
     image: aether-flink:1.18-s3
+
+  flink-bronze-image:
+    build:
+      context: ./flink/bronze
+      dockerfile: Dockerfile
+    image: aether-flink-bronze:latest
 
   flink-jobmanager:
     image: aether-flink:1.18-s3
@@ -270,10 +278,7 @@ services:
       - aether-net
 
   flink-bronze-market-prices:
-    build:
-      context: ./flink/bronze
-      dockerfile: Dockerfile
-    image: aether-flink-bronze-market-prices:latest
+    image: aether-flink-bronze:latest
     container_name: aether-flink-bronze-market-prices
     depends_on:
       kafka:
@@ -293,7 +298,33 @@ services:
         flink run -d \
           -m flink-jobmanager:8081 \
           -c com.aetherstream.bronze.MarketPriceBronzeJob \
-          /opt/flink/jobs/market-price-bronze.jar
+          /opt/flink/jobs/bronze-jobs.jar
+        echo "Submitted"
+    networks:
+      - aether-net
+
+  flink-bronze-market-caps:
+    image: aether-flink-bronze:latest
+    container_name: aether-flink-bronze-market-caps
+    depends_on:
+      kafka:
+        condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
+      flink-jobmanager:
+        condition: service_healthy
+      flink-taskmanager:
+        condition: service_healthy
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        set -e
+        echo "Submitting Flink job..."
+        flink run -d \
+          -m flink-jobmanager:8081 \
+          -c com.aetherstream.bronze.MarketCapBronzeJob \
+          /opt/flink/jobs/bronze-jobs.jar
         echo "Submitted"
     networks:
       - aether-net

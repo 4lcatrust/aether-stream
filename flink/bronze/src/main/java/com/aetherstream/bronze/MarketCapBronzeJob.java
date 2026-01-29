@@ -1,5 +1,5 @@
 package com.aetherstream.bronze;
-import com.aetherstream.bronze.model.MarketPriceBronze;
+import com.aetherstream.bronze.model.MarketCapBronze;
 import com.aetherstream.bronze.util.DebeziumParser;
 import org.apache.flink.api.common.eventtime.WatermarkStrategy;
 import org.apache.flink.connector.kafka.source.KafkaSource;
@@ -16,9 +16,9 @@ import org.apache.flink.streaming.api.functions.sink.filesystem.rollingpolicies.
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
 
-public class MarketPriceBronzeJob {
-    private static final String TOPIC = "aether_pg.public.market_prices";
-    private static final String GROUP_ID = "flink-bronze-market-prices";
+public class MarketCapBronzeJob {
+    private static final String TOPIC = "aether_pg.public.market_caps";
+    private static final String GROUP_ID = "flink-bronze-market-caps";
     private static final ZoneId JAKARTA = ZoneId.of("Asia/Jakarta");
     public static void main(String[] args) throws Exception {
         StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
@@ -40,9 +40,9 @@ public class MarketPriceBronzeJob {
                         )
                         .build();
         // ===== transform Debezium -> lossless Bronze
-        DataStream<MarketPriceBronze> bronze =
+        DataStream<MarketCapBronze> bronze =
                 env.fromSource(source, WatermarkStrategy.noWatermarks(), "kafka-cdc")
-                        .map(DebeziumParser::parseMarketPrice)
+                        .map(DebeziumParser::parseMarketCap)
                         .filter(e -> e != null)
                         .map(out -> {
                             ZonedDateTime now = ZonedDateTime.now(JAKARTA);
@@ -51,13 +51,13 @@ public class MarketPriceBronzeJob {
                             return out;
                         });
         // ===== debug (optional)
-        bronze.map(MarketPriceBronze::toJson).print();
+        bronze.map(MarketCapBronze::toJson).print();
         // ===== Parquet sink (exactly-once)
-        StreamingFileSink<MarketPriceBronze> parquetSink =
+        StreamingFileSink<MarketCapBronze> parquetSink =
                 StreamingFileSink
                         .forBulkFormat(
-                                new Path("s3a://bronze/market_prices"),
-                                ParquetAvroWriters.forReflectRecord(MarketPriceBronze.class)
+                                new Path("s3a://bronze/market_caps"),
+                                ParquetAvroWriters.forReflectRecord(MarketCapBronze.class)
                         )
                         .withBucketAssigner(
                                 new DateTimeBucketAssigner<>(
@@ -73,7 +73,7 @@ public class MarketPriceBronzeJob {
                                         .build()
                         )
                         .build();
-        bronze.addSink(parquetSink).name("bronze-market-prices-parquet");
-        env.execute("AetherStream Bronze: Market Prices");
+        bronze.addSink(parquetSink).name("bronze-market-caps-parquet");
+        env.execute("AetherStream Bronze: Market Caps");
     }
 }

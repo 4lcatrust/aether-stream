@@ -137,7 +137,7 @@
   <build>
 
     <!-- SINGLE deterministic output -->
-    <finalName>market-price-bronze</finalName>
+    <finalName>bronze-jobs</finalName>
 
     <plugins>
 
