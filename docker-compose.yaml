@@ -5,6 +5,8 @@ networks:
 volumes:
   postgres_data:
   kafka_data:
+  clickhouse_data:
+  clickhouse_logs:
 
 services:
 
@@ -39,6 +41,42 @@ services:
       - "max_wal_senders=10"
     networks:
       - aether-net
+
+  # ============================
+  # ClickHouse (Downstream)
+  # ============================
+
+  clickhouse:
+    image: clickhouse/clickhouse-server:latest
+    container_name: aether-clickhouse
+    hostname: clickhouse
+    ports:
+      - "8123:8123"   # HTTP interface
+      - "9002:9000"   # Native TCP interface
+    environment:
+      CLICKHOUSE_DB: aether
+      CLICKHOUSE_USER: aether
+      CLICKHOUSE_PASSWORD: aether
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: "1"
+    volumes:
+      - clickhouse_data:/var/lib/clickhouse
+      - clickhouse_logs:/var/log/clickhouse-server
+      # Optional: init SQL on first boot
+      - ./clickhouse/initdb:/docker-entrypoint-initdb.d:ro
+      # Optional: custom configs (only if you need them)
+      # - ./clickhouse/config.d:/etc/clickhouse-server/config.d:ro
+      # - ./clickhouse/users.d:/etc/clickhouse-server/users.d:ro
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+    networks:
+      - aether-net
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8123/ping | grep -q Ok"]
+      interval: 10s
+      timeout: 3s
+      retries: 20
 
   # ============================
   # Zookeeper
