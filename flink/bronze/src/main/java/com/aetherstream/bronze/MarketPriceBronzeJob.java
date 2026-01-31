@@ -2,59 +2,63 @@ package com.aetherstream.bronze;
 import com.aetherstream.bronze.model.MarketPriceBronze;
 import com.aetherstream.bronze.util.DebeziumParser;
 import org.apache.flink.api.common.eventtime.WatermarkStrategy;
+import org.apache.flink.api.common.serialization.SimpleStringSchema;
 import org.apache.flink.connector.kafka.source.KafkaSource;
 import org.apache.flink.connector.kafka.source.enumerator.initializer.OffsetsInitializer;
-import org.apache.kafka.clients.consumer.OffsetResetStrategy;
 import org.apache.flink.core.fs.Path;
+import org.apache.flink.formats.parquet.avro.ParquetAvroWriters;
 import org.apache.flink.streaming.api.CheckpointingMode;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
-import org.apache.flink.formats.parquet.avro.ParquetAvroWriters;
-import org.apache.flink.streaming.api.functions.sink.filesystem.StreamingFileSink;
 import org.apache.flink.streaming.api.functions.sink.filesystem.OutputFileConfig;
+import org.apache.flink.streaming.api.functions.sink.filesystem.StreamingFileSink;
 import org.apache.flink.streaming.api.functions.sink.filesystem.bucketassigners.DateTimeBucketAssigner;
 import org.apache.flink.streaming.api.functions.sink.filesystem.rollingpolicies.OnCheckpointRollingPolicy;
+import org.apache.kafka.clients.consumer.OffsetResetStrategy;
+import java.math.BigDecimal;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
-
 public class MarketPriceBronzeJob {
     private static final String TOPIC = "aether_pg.public.market_prices";
     private static final String GROUP_ID = "flink-bronze-market-prices";
     private static final ZoneId JAKARTA = ZoneId.of("Asia/Jakarta");
+    private static final BigDecimal UNKNOWN_MAX_SUPPLY_SENTINEL = new BigDecimal("-1");
     public static void main(String[] args) throws Exception {
-        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
-        // ===== checkpointing (cluster-level storage)
+        final StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        // ===== checkpointing
         env.enableCheckpointing(30_000);
         env.getCheckpointConfig().setMinPauseBetweenCheckpoints(15_000);
         env.getCheckpointConfig().setCheckpointTimeout(120_000);
         env.getCheckpointConfig().setCheckpointingMode(CheckpointingMode.EXACTLY_ONCE);
         env.getCheckpointConfig().setMaxConcurrentCheckpoints(1);
-        // ===== Kafka CDC source
-        KafkaSource<String> source =
+        // ===== kafka CDC source
+        final KafkaSource<String> source =
                 KafkaSource.<String>builder()
                         .setBootstrapServers("kafka:9092")
                         .setTopics(TOPIC)
                         .setGroupId(GROUP_ID)
                         .setStartingOffsets(OffsetsInitializer.committedOffsets(OffsetResetStrategy.EARLIEST))
-                        .setValueOnlyDeserializer(
-                                new org.apache.flink.api.common.serialization.SimpleStringSchema()
-                        )
+                        .setValueOnlyDeserializer(new SimpleStringSchema())
                         .build();
-        // ===== transform Debezium -> lossless Bronze
-        DataStream<MarketPriceBronze> bronze =
+        // ===== transform Debezium -> Bronze
+        final DataStream<MarketPriceBronze> bronze =
                 env.fromSource(source, WatermarkStrategy.noWatermarks(), "kafka-cdc")
                         .map(DebeziumParser::parseMarketPrice)
                         .filter(e -> e != null)
                         .map(out -> {
-                            ZonedDateTime now = ZonedDateTime.now(JAKARTA);
-                            out.ingestionDate = now.toLocalDate().toString();         // yyyy-MM-dd
-                            out.ingestionHour = String.format("%02d", now.getHour()); // HH
+                            final ZonedDateTime now = ZonedDateTime.now(JAKARTA);
+                            out.ingestionDate = now.toLocalDate().toString();
+                            out.ingestionHour = String.format("%02d", now.getHour());
+                            if (out.marketCap == null) {
+                                out.marketCap = UNKNOWN_MAX_SUPPLY_SENTINEL;
+                            }
                             return out;
-                        });
-        // ===== debug (optional)
-        bronze.map(MarketPriceBronze::toJson).print();
-        // ===== Parquet sink (exactly-once)
-        StreamingFileSink<MarketPriceBronze> parquetSink =
+                        })
+                        .name("parse-debezium-and-enrich");
+        // ===== debug
+        bronze.map(MarketPriceBronze::toJson).name("debug-json").print();
+        // ===== Parquet sink
+        final StreamingFileSink<MarketPriceBronze> parquetSink =
                 StreamingFileSink
                         .forBulkFormat(
                                 new Path("s3a://bronze/market_prices"),
@@ -75,6 +79,6 @@ public class MarketPriceBronzeJob {
                         )
                         .build();
         bronze.addSink(parquetSink).name("bronze-market-prices-parquet");
-        env.execute("AetherStream Bronze: Market Prices");
+        env.execute("AetherStream Bronze: market_prices");
     }
 }
