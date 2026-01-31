@@ -1,5 +1,5 @@
+/* operational */
 CREATE DATABASE IF NOT EXISTS aether;
-
 CREATE TABLE IF NOT EXISTS aether._healthcheck
 (
   ts DateTime DEFAULT now(),
@@ -7,11 +7,10 @@ CREATE TABLE IF NOT EXISTS aether._healthcheck
 )
 ENGINE = MergeTree
 ORDER BY ts;
-
 INSERT INTO aether._healthcheck (msg) VALUES ('clickhouse up');
 
+/* bronze layer */
 CREATE DATABASE IF NOT EXISTS bronze;
-
 CREATE OR REPLACE VIEW bronze.market_caps AS
 SELECT
   * EXCEPT(ingestionDate, ingestionHour),
@@ -24,7 +23,6 @@ FROM s3(
   'Parquet'
 )
 SETTINGS use_hive_partitioning = 0;
-
 CREATE OR REPLACE VIEW bronze.market_prices AS
 SELECT
   * EXCEPT(ingestionDate, ingestionHour),
@@ -37,3 +35,9 @@ FROM s3(
   'Parquet'
 )
 SETTINGS use_hive_partitioning = 0;
+
+/* silver layer */
+CREATE DATABASE IF NOT EXISTS silver;
+
+/* gold layer */
+CREATE DATABASE IF NOT EXISTS gold;
