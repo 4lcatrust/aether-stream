@@ -4,6 +4,7 @@ import com.aetherstream.bronze.util.DebeziumParser;
 import org.apache.flink.api.common.eventtime.WatermarkStrategy;
 import org.apache.flink.connector.kafka.source.KafkaSource;
 import org.apache.flink.connector.kafka.source.enumerator.initializer.OffsetsInitializer;
+import org.apache.kafka.clients.consumer.OffsetResetStrategy;
 import org.apache.flink.core.fs.Path;
 import org.apache.flink.streaming.api.CheckpointingMode;
 import org.apache.flink.streaming.api.datastream.DataStream;
@@ -34,7 +35,7 @@ public class MarketCapBronzeJob {
                         .setBootstrapServers("kafka:9092")
                         .setTopics(TOPIC)
                         .setGroupId(GROUP_ID)
-                        .setStartingOffsets(OffsetsInitializer.committedOffsets())
+                        .setStartingOffsets(OffsetsInitializer.committedOffsets(OffsetResetStrategy.EARLIEST))
                         .setValueOnlyDeserializer(
                                 new org.apache.flink.api.common.serialization.SimpleStringSchema()
                         )
