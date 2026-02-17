@@ -108,6 +108,7 @@ CREATE OR REPLACE TABLE bronze.market_prices
     price Decimal(38, 18),
     marketCap Decimal(38, 18),
     volume24h Decimal(38, 18),
+    coinImage String,
     eventTimeMs UInt64,
     sourceTsMs UInt64,
     createdAtMs UInt64,
