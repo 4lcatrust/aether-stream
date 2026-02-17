@@ -259,3 +259,118 @@ WHERE tupleElement(final_state, 8) != 'd'
 
 /* gold layer */
 CREATE DATABASE IF NOT EXISTS gold;
+CREATE OR REPLACE TABLE gold.dim_asset
+(
+    asset_id String,
+    symbol String,
+    coin_name String,
+    coin_image String,
+    currency String,
+    last_event_time_ms UInt64,
+    last_event_time DateTime('Asia/Jakarta'),
+    last_lsn UInt64,
+    last_op String,
+    updated_at DateTime DEFAULT now()
+)
+ENGINE = ReplacingMergeTree(last_lsn)
+ORDER BY (asset_id);
+
+DROP VIEW IF EXISTS gold.mv_dim_asset_from_prices;
+CREATE MATERIALIZED VIEW gold.mv_dim_asset_from_prices
+TO gold.dim_asset
+AS
+SELECT
+    assetId AS asset_id,
+    symbol AS symbol,
+    coinName AS coin_name,
+    coinImage AS coin_image,
+    currency AS currency,
+    eventTimeMs AS last_event_time_ms,
+    toDateTime(eventTimeMs / 1000, 'Asia/Jakarta') AS last_event_time,
+    lsn AS last_lsn,
+    op  AS last_op,
+    now() AS updated_at
+FROM bronze.market_prices
+WHERE op != 'd';
+
+CREATE OR REPLACE TABLE gold.fct_market_prices
+(
+    asset_id String,
+    event_time_ms UInt64,
+    event_time DateTime('Asia/Jakarta'),
+    event_date Date MATERIALIZED toDate(event_time),
+    price Decimal(38, 18),
+    market_cap Decimal(38, 18),
+    volume_24h Decimal(38, 18),
+    currency String,
+    lsn UInt64,
+    op String,
+    ingestion_date Date,
+    ingestion_hour String,
+    loaded_at DateTime DEFAULT now()
+)
+ENGINE = ReplacingMergeTree(lsn)
+PARTITION BY toYYYYMM(event_time)
+ORDER BY (asset_id, event_time_ms);
+
+DROP VIEW IF EXISTS gold.mv_fct_market_prices;
+CREATE MATERIALIZED VIEW gold.mv_fct_market_prices
+TO gold.fct_market_prices
+AS
+SELECT
+    assetId AS asset_id,
+    eventTimeMs AS event_time_ms,
+    toDateTime(eventTimeMs / 1000, 'Asia/Jakarta') AS event_time,
+    price AS price,
+    marketCap AS market_cap,
+    volume24h AS volume_24h,
+    currency AS currency,
+    lsn,
+    op,
+    ingestion_date,
+    ingestion_hour,
+    now() AS loaded_at
+FROM bronze.market_prices
+WHERE op != 'd';
+
+CREATE OR REPLACE TABLE gold.fct_market_caps
+(
+    asset_id String,
+    event_time_ms UInt64,
+    event_time DateTime('Asia/Jakarta'),
+    event_date Date MATERIALIZED toDate(event_time),
+    market_cap Decimal(38, 18),
+    circulating_supply Decimal(38, 18),
+    total_supply Decimal(38, 18),
+    max_supply Decimal(38, 18),
+    currency String,
+    lsn UInt64,
+    op String,
+    ingestion_date Date,
+    ingestion_hour String,
+    loaded_at DateTime DEFAULT now()
+)
+ENGINE = ReplacingMergeTree(lsn)
+PARTITION BY toYYYYMM(event_time)
+ORDER BY (asset_id, event_time_ms);
+
+DROP VIEW IF EXISTS gold.mv_fct_market_caps;
+CREATE MATERIALIZED VIEW gold.mv_fct_market_caps
+TO gold.fct_market_caps
+AS
+SELECT
+    assetId AS asset_id,
+    eventTimeMs AS event_time_ms,
+    toDateTime(eventTimeMs / 1000, 'Asia/Jakarta') AS event_time,
+    marketCap AS market_cap,
+    circulatingSupply AS circulating_supply,
+    totalSupply AS total_supply,
+    maxSupply AS max_supply,
+    currency,
+    lsn,
+    op,
+    ingestion_date,
+    ingestion_hour,
+    now() AS loaded_at
+FROM bronze.market_caps
+WHERE op != 'd';
