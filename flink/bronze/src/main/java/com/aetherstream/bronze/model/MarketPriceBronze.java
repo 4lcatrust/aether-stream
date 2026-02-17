@@ -1,13 +1,5 @@
 package com.aetherstream.bronze.model;
-/**
- * Lossless CDC Bronze model for public.market_prices.
- *
- * Guarantees:
- * - Mirrors ALL source columns
- * - Append-only CDC events
- * - BigDecimal for all numerics (precision-safe)
- * - No semantic transformation (Silver owns semantics)
- */
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
@@ -41,8 +33,11 @@ public class MarketPriceBronze implements Serializable {
     public String sourceSchema;
     public String sourceTable;
     // ===== ingestion partitions =====
-    public String ingestionDate; // yyyy-MM-dd
-    public String ingestionHour; // HH
+    @JsonProperty("ingestion_date")
+    public String ingestionDate;
+
+    @JsonProperty("ingestion_hour")
+    public String ingestionHour;
 
     public MarketPriceBronze() {}
     public static Long toMillis(Instant ts) {

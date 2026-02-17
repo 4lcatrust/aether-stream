@@ -1,6 +1,7 @@
 package com.aetherstream.bronze;
 import com.aetherstream.bronze.model.MarketPriceBronze;
 import com.aetherstream.bronze.util.DebeziumParser;
+import com.aetherstream.bronze.sink.ClickHouseHttpSink;
 import org.apache.flink.api.common.eventtime.WatermarkStrategy;
 import org.apache.flink.api.common.serialization.SimpleStringSchema;
 import org.apache.flink.connector.kafka.source.KafkaSource;
@@ -79,6 +80,16 @@ public class MarketPriceBronzeJob {
                         )
                         .build();
         bronze.addSink(parquetSink).name("bronze-market-prices-parquet");
+        // ===== ClickHouse sink
+        bronze
+                .map(MarketPriceBronze::toJson)
+                .addSink(new ClickHouseHttpSink(
+                        "http://clickhouse:8123",
+                        "INSERT INTO bronze.market_prices FORMAT JSONEachRow",
+                        "aether",
+                        "aether"
+                ))
+                .name("bronze-market-prices-clickhouse");
         env.execute("AetherStream Bronze: market_prices");
     }
 }

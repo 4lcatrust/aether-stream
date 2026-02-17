@@ -121,6 +121,12 @@
       <version>2.16.1</version>
     </dependency>
 
+    <dependency>
+      <groupId>org.apache.httpcomponents.client5</groupId>
+      <artifactId>httpclient5</artifactId>
+      <version>5.2.1</version>
+    </dependency>
+
     <!-- ================= Logging (provided by Flink) ================= -->
     <dependency>
       <groupId>org.slf4j</groupId>
@@ -181,14 +187,6 @@
                   </excludes>
                 </filter>
               </filters>
-
-              <!-- Entry point -->
-              <transformers>
-                <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
-                  <mainClass>com.aetherstream.bronze.MarketPriceBronzeJob</mainClass>
-                </transformer>
-              </transformers>
-
             </configuration>
           </execution>
         </executions>
