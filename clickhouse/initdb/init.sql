@@ -375,3 +375,52 @@ SELECT
     now() AS loaded_at
 FROM bronze.market_caps
 WHERE op != 'd';
+
+CREATE OR REPLACE VIEW gold.sem_market_overview
+AS
+WITH
+latest_prices AS (
+SELECT
+    asset_id,
+    argMax(price, event_time) AS price,
+    argMax(volume_24h, event_time) AS volume_24h,
+    argMax(market_cap, event_time) AS market_cap,
+    max(event_time) AS last_event_time
+FROM gold.fct_market_prices
+GROUP BY asset_id
+),
+latest_caps AS (
+SELECT
+    asset_id,
+    argMax(circulating_supply, event_time) AS circulating_supply,
+    argMax(total_supply, event_time) AS total_supply,
+    argMax(NULLIF(max_supply, -1), event_time) AS max_supply
+FROM gold.fct_market_caps
+GROUP BY asset_id
+),
+merged AS (
+SELECT
+    p.asset_id,
+    p.price,
+    p.volume_24h,
+    p.market_cap,
+    c.circulating_supply,
+    c.total_supply,
+    c.max_supply,
+    p.last_event_time,
+    SUM(p.market_cap::Float64) OVER() AS whole_market_cap,
+    SUM(c.circulating_supply::Float64) OVER() AS whole_circulating_supply
+FROM latest_prices p
+LEFT JOIN latest_caps c
+    ON p.asset_id = c.asset_id
+)
+SELECT
+    m.* EXCEPT(
+    	whole_market_cap,
+    	whole_circulating_supply
+	),
+    RANK() OVER (ORDER BY market_cap DESC) AS market_cap_rank,
+    volume_24h / market_cap::Float64 AS liquid_indicator_24h,
+    market_cap / whole_market_cap AS market_dominance,
+    circulating_supply / whole_circulating_supply AS supply_dominance
+FROM merged m;
