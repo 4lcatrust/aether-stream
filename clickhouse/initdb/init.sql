@@ -1,75 +1,101 @@
-/* operational */
-CREATE DATABASE IF NOT EXISTS omt;
-CREATE TABLE IF NOT EXISTS omt.healthcheck
-(
-  ts DateTime DEFAULT now(),
-  msg String
-)
-ENGINE = MergeTree
-ORDER BY ts;
-INSERT INTO omt.healthcheck (msg) VALUES ('clickhouse up');
-
 /* lz layer */
 CREATE DATABASE IF NOT EXISTS lz;
-CREATE OR REPLACE TABLE lz.market_caps
-(
-    assetId String,
-    symbol String,
-    coinName String,
-    currency String,
-    marketCap Decimal(38, 18),
-    circulatingSupply Decimal(38, 18),
-    totalSupply Decimal(38, 18),
-    maxSupply Decimal(38, 18),
-    eventTimeMs UInt64,
-    sourceTsMs UInt64,
-    createdAtMs UInt64,
-    updatedAtMs UInt64,
-    op String,
-    lsn UInt64,
-    sourceDb String,
-    sourceSchema String,
-    sourceTable String,
-    ingestion_date Date,
-    hour String
-)
-ENGINE = S3(
-  'http://minio:9000/bronze/market_caps/*/*/*.parquet',
-  'minioadmin',
-  'minioadmin',
-  'Parquet'
+CREATE OR REPLACE VIEW lz.market_caps AS
+SELECT
+    assetId,
+    symbol,
+    coinName,
+    currency,
+    marketCap,
+    circulatingSupply,
+    totalSupply,
+    maxSupply,
+    eventTimeMs,
+    sourceTsMs,
+    createdAtMs,
+    updatedAtMs,
+    op,
+    lsn,
+    sourceDb,
+    sourceSchema,
+    sourceTable,
+    ingestion_date,
+    hour AS ingestion_hour
+FROM s3(
+ 'http://minio:9000/bronze/market_caps/*/*/*.parquet',
+ 'minioadmin',
+ 'minioadmin',
+ 'Parquet',
+ 'assetId String,
+  symbol String,
+  coinName String,
+  currency String,
+  marketCap Decimal(38,18),
+  circulatingSupply Decimal(38,18),
+  totalSupply Decimal(38,18),
+  maxSupply Decimal(38,18),
+  eventTimeMs UInt64,
+  sourceTsMs UInt64,
+  createdAtMs UInt64,
+  updatedAtMs UInt64,
+  op String,
+  lsn UInt64,
+  sourceDb String,
+  sourceSchema String,
+  sourceTable String,
+  ingestion_date Date,
+  hour String'
 )
 SETTINGS use_hive_partitioning = 1;
 
-CREATE OR REPLACE TABLE lz.market_prices
-(
-    assetId String,
-    symbol String,
-    coinName String,
-    currency String,
-    price Decimal(38, 18),
-    marketCap Decimal(38, 18),
-    volume24h Decimal(38, 18),
-    coinImage String,
-    eventTimeMs UInt64,
-    sourceTsMs UInt64,
-    createdAtMs UInt64,
-    updatedAtMs UInt64,
-    op String,
-    lsn UInt64,
-    sourceDb String,
-    sourceSchema String,
-    sourceTable String,
-    ingestion_date Date,
-    hour String
-)
-ENGINE = S3(
-  'http://minio:9000/bronze/market_prices/*/*/*.parquet',
-  'minioadmin',
-  'minioadmin',
-  'Parquet'
+CREATE OR REPLACE VIEW lz.market_prices AS
+SELECT
+    assetId,
+    symbol,
+    coinName,
+    currency,
+    price,
+    marketCap,
+    volume24h,
+    coinImage,
+    eventTimeMs,
+    sourceTsMs,
+    createdAtMs,
+    updatedAtMs,
+    op,
+    lsn,
+    sourceDb,
+    sourceSchema,
+    sourceTable,
+    ingestion_date,
+    hour AS ingestion_hour
+FROM s3(
+ 'http://minio:9000/bronze/market_prices/*/*/*.parquet',
+ 'minioadmin',
+ 'minioadmin',
+ 'Parquet',
+ 'assetId String,
+  symbol String,
+  coinName String,
+  currency String,
+  price Decimal(38, 18),
+  marketCap Decimal(38, 18),
+  volume24h Decimal(38, 18),
+  coinImage String,
+  eventTimeMs UInt64,
+  sourceTsMs UInt64,
+  createdAtMs UInt64,
+  updatedAtMs UInt64,
+  op String,
+  lsn UInt64,
+  sourceDb String,
+  sourceSchema String,
+  sourceTable String,
+  ingestion_date Date,
+  hour String'
 )
 SETTINGS use_hive_partitioning = 1;
+
 
 /* bronze layer */
 CREATE DATABASE IF NOT EXISTS bronze;
@@ -424,3 +450,345 @@ SELECT
     market_cap / whole_market_cap AS market_dominance,
     circulating_supply / whole_circulating_supply AS supply_dominance
 FROM merged m;
+
+/* operational */
+CREATE DATABASE IF NOT EXISTS omt;
+
+/* pipeline health check lag time between event_time and current timestamp */
+CREATE OR REPLACE VIEW omt.pipeline_health AS
+WITH
+prices AS (
+    SELECT
+        'market_prices' AS table_name,
+        MAX(event_time) AS latest_event_time
+    FROM gold.fct_market_prices
+),
+caps AS (
+    SELECT
+        'market_caps' AS table_name,
+        MAX(event_time) AS latest_event_time
+    FROM gold.fct_market_caps
+),
+unioned AS (
+    SELECT * FROM prices
+    UNION ALL
+    SELECT * FROM caps
+)
+SELECT
+    now('Asia/Jakarta') AS checked_at,
+    table_name,
+    latest_event_time,
+    dateDiff(
+        'minute',
+        latest_event_time,
+        now('Asia/Jakarta')
+    ) AS minutes_lag,
+    CASE
+        WHEN latest_event_time IS NULL OR latest_event_time::Date = '1970-01-01' THEN 'empty'
+        WHEN dateDiff('minute', latest_event_time, now('Asia/Jakarta')) <= 10 THEN 'healthy'
+        WHEN dateDiff('minute', latest_event_time, now('Asia/Jakarta')) <= 30 THEN 'delayed'
+        ELSE 'stale'
+    END AS pipeline_status
+FROM unioned;
+
+/* data validation table level between landing zone (MinIO parquet read) and bronze layer (clickhouse sink) */
+CREATE OR REPLACE VIEW omt.sink_validation AS
+WITH
+bronze_caps AS (
+    SELECT
+        COUNT() AS bronze_count,
+        MIN(lsn) AS bronze_min_lsn,
+        MAX(lsn) AS bronze_max_lsn,
+        SUM(
+            cityHash64(
+                assetId,
+                lsn,
+                toString(marketCap),
+                toString(circulatingSupply),
+                toString(totalSupply)
+            )
+        ) AS bronze_checksum
+    FROM bronze.market_caps
+    WHERE ingestion_date >= today() - 7
+),
+
+lz_caps AS (
+    SELECT
+        COUNT() AS lz_count,
+        MIN(lsn) AS lz_min_lsn,
+        MAX(lsn) AS lz_max_lsn,
+        SUM(
+            cityHash64(
+                assetId,
+                lsn,
+                toString(marketCap),
+                toString(circulatingSupply),
+                toString(totalSupply)
+            )
+        ) AS lz_checksum
+    FROM lz.market_caps
+    WHERE ingestion_date >= today() - 7
+)
+
+SELECT
+    NOW('Asia/Jakarta') AS checked_at,
+    'market_caps' AS table_name,
+    bronze_count,
+    lz_count,
+    (bronze_count = lz_count)::Boolean AS row_count_match,
+    bronze_min_lsn,
+    lz_min_lsn,
+    (bronze_min_lsn = lz_min_lsn)::Boolean AS min_lsn_match,
+    bronze_max_lsn,
+    lz_max_lsn,
+    (bronze_max_lsn = lz_max_lsn)::Boolean AS max_lsn_match,
+    bronze_checksum,
+    lz_checksum,
+    (bronze_checksum = lz_checksum)::Boolean AS checksum_match,
+    CASE
+        WHEN bronze_count = lz_count
+         AND bronze_min_lsn = lz_min_lsn
+         AND bronze_max_lsn = lz_max_lsn
+         AND bronze_checksum = lz_checksum
+        THEN 'HEALTHY'
+        ELSE 'MISMATCH'
+    END AS validation_status
+FROM bronze_caps
+CROSS JOIN lz_caps
+UNION ALL
+
+WITH
+bronze_prices AS (
+    SELECT
+        COUNT() AS bronze_count,
+        MIN(lsn) AS bronze_min_lsn,
+        MAX(lsn) AS bronze_max_lsn,
+        SUM(
+            cityHash64(
+                assetId,
+                lsn,
+                toString(price),
+                toString(marketCap),
+                toString(volume24h)
+            )
+        ) AS bronze_checksum
+    FROM bronze.market_prices
+    WHERE ingestion_date >= today() - 7
+),
+lz_prices AS (
+    SELECT
+        COUNT() AS lz_count,
+        MIN(lsn) AS lz_min_lsn,
+        MAX(lsn) AS lz_max_lsn,
+        SUM(
+            cityHash64(
+                assetId,
+                lsn,
+                toString(price),
+                toString(marketCap),
+                toString(volume24h)
+            )
+        ) AS lz_checksum
+    FROM lz.market_prices
+    WHERE ingestion_date >= today() - 7
+)
+SELECT
+    now('Asia/Jakarta') AS checked_at,
+    'market_prices' AS table_name,
+    bronze_count,
+    lz_count,
+    (bronze_count = lz_count)::Boolean AS row_count_match,
+    bronze_min_lsn,
+    lz_min_lsn,
+    (bronze_min_lsn = lz_min_lsn)::Boolean AS min_lsn_match,
+    bronze_max_lsn,
+    lz_max_lsn,
+    (bronze_max_lsn = lz_max_lsn)::Boolean AS max_lsn_match,
+    bronze_checksum,
+    lz_checksum,
+    (bronze_checksum = lz_checksum)::Boolean AS checksum_match,
+    CASE
+        WHEN bronze_count = lz_count
+         AND bronze_min_lsn = lz_min_lsn
+         AND bronze_max_lsn = lz_max_lsn
+         AND bronze_checksum = lz_checksum
+        THEN 'HEALTHY'
+        ELSE 'MISMATCH'
+    END AS validation_status
+FROM bronze_prices
+CROSS JOIN lz_prices;
+
+/* data validation partition level between landing zone (MinIO parquet read) and bronze layer (clickhouse sink) */
+CREATE OR REPLACE VIEW omt.sink_validation_partition AS
+WITH
+bronze_caps AS (
+    SELECT
+        ingestion_date,
+        ingestion_hour,
+        COUNT() AS bronze_count,
+        MIN(lsn) AS bronze_min_lsn,
+        MAX(lsn) AS bronze_max_lsn,
+        SUM(
+            cityHash64(
+                assetId,
+                lsn,
+                toString(marketCap),
+                toString(circulatingSupply),
+                toString(totalSupply)
+            )
+        ) AS bronze_checksum
+    FROM bronze.market_caps
+    WHERE ingestion_date >= today() - 7
+    GROUP BY ingestion_date, ingestion_hour
+),
+lz_caps AS (
+    SELECT
+        ingestion_date,
+        ingestion_hour,
+        COUNT() AS lz_count,
+        MIN(lsn) AS lz_min_lsn,
+        MAX(lsn) AS lz_max_lsn,
+        SUM(
+            cityHash64(
+                assetId,
+                lsn,
+                toString(marketCap),
+                toString(circulatingSupply),
+                toString(totalSupply)
+            )
+        ) AS lz_checksum
+    FROM lz.market_caps
+    WHERE ingestion_date >= today() - 7
+    GROUP BY ingestion_date, ingestion_hour
+),
+caps_joined AS (
+    SELECT
+        coalesce(b.ingestion_date, l.ingestion_date) AS ingestion_date,
+        coalesce(b.ingestion_hour, l.ingestion_hour) AS ingestion_hour,
+        'market_caps' AS table_name,
+        b.bronze_count,
+        l.lz_count,
+        b.bronze_min_lsn,
+        l.lz_min_lsn,
+        b.bronze_max_lsn,
+        l.lz_max_lsn,
+        b.bronze_checksum,
+        l.lz_checksum
+    FROM bronze_caps b
+    FULL OUTER JOIN lz_caps l
+        ON b.ingestion_date = l.ingestion_date
+       AND b.ingestion_hour = l.ingestion_hour
+),
+bronze_prices AS (
+    SELECT
+        ingestion_date,
+        ingestion_hour,
+        COUNT() AS bronze_count,
+        MIN(lsn) AS bronze_min_lsn,
+        MAX(lsn) AS bronze_max_lsn,
+        SUM(
+            cityHash64(
+                assetId,
+                lsn,
+                toString(price),
+                toString(marketCap),
+                toString(volume24h)
+            )
+        ) AS bronze_checksum
+    FROM bronze.market_prices
+    WHERE ingestion_date >= today() - 7
+    GROUP BY ingestion_date, ingestion_hour
+),
+lz_prices AS (
+    SELECT
+        ingestion_date,
+        ingestion_hour,
+        COUNT() AS lz_count,
+        MIN(lsn) AS lz_min_lsn,
+        MAX(lsn) AS lz_max_lsn,
+        SUM(
+            cityHash64(
+                assetId,
+                lsn,
+                toString(price),
+                toString(marketCap),
+                toString(volume24h)
+            )
+        ) AS lz_checksum
+    FROM lz.market_prices
+    WHERE ingestion_date >= today() - 7
+    GROUP BY ingestion_date, ingestion_hour
+),
+prices_joined AS (
+    SELECT
+        coalesce(b.ingestion_date, l.ingestion_date) AS ingestion_date,
+        coalesce(b.ingestion_hour, l.ingestion_hour) AS ingestion_hour,
+        'market_prices' AS table_name,
+        b.bronze_count,
+        l.lz_count,
+        b.bronze_min_lsn,
+        l.lz_min_lsn,
+        b.bronze_max_lsn,
+        l.lz_max_lsn,
+        b.bronze_checksum,
+        l.lz_checksum
+    FROM bronze_prices b
+    FULL OUTER JOIN lz_prices l
+        ON b.ingestion_date = l.ingestion_date
+       AND b.ingestion_hour = l.ingestion_hour
+)
+SELECT
+    now('Asia/Jakarta') AS checked_at,
+    ingestion_date,
+    ingestion_hour,
+    table_name,
+    bronze_count,
+    lz_count,
+    (bronze_count = lz_count)::Boolean AS row_count_match,
+    bronze_min_lsn,
+    lz_min_lsn,
+    (bronze_min_lsn = lz_min_lsn)::Boolean AS min_lsn_match,
+    bronze_max_lsn,
+    lz_max_lsn,
+    (bronze_max_lsn = lz_max_lsn)::Boolean AS max_lsn_match,
+    bronze_checksum,
+    lz_checksum,
+    (bronze_checksum = lz_checksum)::Boolean AS checksum_match,
+    CASE
+        WHEN bronze_count IS NULL OR lz_count IS NULL THEN 'MISSING_PARTITION'
+        WHEN bronze_count = lz_count
+         AND bronze_min_lsn = lz_min_lsn
+         AND bronze_max_lsn = lz_max_lsn
+         AND bronze_checksum = lz_checksum
+        THEN 'HEALTHY'
+        ELSE 'MISMATCH'
+    END AS validation_status
+FROM caps_joined
+UNION ALL
+SELECT
+    now('Asia/Jakarta'),
+    ingestion_date,
+    ingestion_hour,
+    table_name,
+    bronze_count,
+    lz_count,
+    (bronze_count = lz_count)::Boolean,
+    bronze_min_lsn,
+    lz_min_lsn,
+    (bronze_min_lsn = lz_min_lsn)::Boolean,
+    bronze_max_lsn,
+    lz_max_lsn,
+    (bronze_max_lsn = lz_max_lsn)::Boolean,
+    bronze_checksum,
+    lz_checksum,
+    (bronze_checksum = lz_checksum)::Boolean,
+    CASE
+        WHEN bronze_count IS NULL OR lz_count IS NULL THEN 'MISSING_PARTITION'
+        WHEN bronze_count = lz_count
+         AND bronze_min_lsn = lz_min_lsn
+         AND bronze_max_lsn = lz_max_lsn
+         AND bronze_checksum = lz_checksum
+        THEN 'HEALTHY'
+        ELSE 'MISMATCH'
+    END
+FROM prices_joined;
