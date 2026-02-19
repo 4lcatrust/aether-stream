@@ -369,3 +369,25 @@ services:
         echo "Submitted"
     networks:
       - aether-net
+
+  # ============================
+  # Continuous Ingestion Service
+  # ============================
+  service-ingest-aether:
+    build:
+      context: ./seed
+      dockerfile: Dockerfile
+    container_name: aether-ingest
+    hostname: ingest
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PGHOST: postgres
+      PGPORT: 5432
+      PGDATABASE: aether
+      PGUSER: aether
+      PGPASSWORD: aether
+    restart: always
+    networks:
+      - aether-net
