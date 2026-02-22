@@ -1,6 +1,7 @@
 package com.aetherstream.bronze;
 import com.aetherstream.bronze.model.MarketPriceBronze;
 import com.aetherstream.bronze.util.DebeziumParser;
+import com.aetherstream.bronze.util.ClickHouseJsonUtil;
 import com.aetherstream.bronze.sink.ClickHouseHttpSink;
 import org.apache.flink.api.common.eventtime.WatermarkStrategy;
 import org.apache.flink.api.common.serialization.SimpleStringSchema;
@@ -23,7 +24,6 @@ public class MarketPriceBronzeJob {
     private static final String TOPIC = "aether_pg.public.market_prices";
     private static final String GROUP_ID = "flink-bronze-market-prices";
     private static final ZoneId JAKARTA = ZoneId.of("Asia/Jakarta");
-    private static final BigDecimal UNKNOWN_MAX_SUPPLY_SENTINEL = new BigDecimal("-1");
     public static void main(String[] args) throws Exception {
         final StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
         // ===== checkpointing
@@ -48,22 +48,19 @@ public class MarketPriceBronzeJob {
                         .filter(e -> e != null)
                         .map(out -> {
                             final ZonedDateTime now = ZonedDateTime.now(JAKARTA);
-                            out.ingestionDate = now.toLocalDate().toString();
-                            out.ingestionHour = String.format("%02d", now.getHour());
-                            if (out.marketCap == null) {
-                                out.marketCap = UNKNOWN_MAX_SUPPLY_SENTINEL;
-                            }
+                            out.setIngestionDate(now.toLocalDate().toString());
+                            out.setIngestionHour(String.format("%02d", now.getHour()));
                             return out;
                         })
                         .name("parse-debezium-and-enrich");
         // ===== debug
-        bronze.map(MarketPriceBronze::toJson).name("debug-json").print();
+        bronze.map(ClickHouseJsonUtil::toJson).name("debug-json").print();
         // ===== Parquet sink
         final StreamingFileSink<MarketPriceBronze> parquetSink =
                 StreamingFileSink
                         .forBulkFormat(
                                 new Path("s3a://bronze/market_prices"),
-                                ParquetAvroWriters.forReflectRecord(MarketPriceBronze.class)
+                                ParquetAvroWriters.forSpecificRecord(MarketPriceBronze.class)
                         )
                         .withBucketAssigner(
                                 new DateTimeBucketAssigner<>(
@@ -82,7 +79,7 @@ public class MarketPriceBronzeJob {
         bronze.addSink(parquetSink).name("bronze-market-prices-parquet");
         // ===== ClickHouse sink
         bronze
-                .map(MarketPriceBronze::toJson)
+                .map(ClickHouseJsonUtil::toJson)
                 .addSink(new ClickHouseHttpSink(
                         "http://clickhouse:8123",
                         "INSERT INTO bronze.market_prices FORMAT JSONEachRow",

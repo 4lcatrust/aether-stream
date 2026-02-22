@@ -1,6 +1,7 @@
 package com.aetherstream.bronze;
 import com.aetherstream.bronze.model.MarketCapBronze;
 import com.aetherstream.bronze.util.DebeziumParser;
+import com.aetherstream.bronze.util.ClickHouseJsonUtil;
 import com.aetherstream.bronze.sink.ClickHouseHttpSink;
 import org.apache.flink.api.common.eventtime.WatermarkStrategy;
 import org.apache.flink.api.common.serialization.SimpleStringSchema;
@@ -23,7 +24,6 @@ public class MarketCapBronzeJob {
     private static final String TOPIC = "aether_pg.public.market_caps";
     private static final String GROUP_ID = "flink-bronze-market-caps";
     private static final ZoneId JAKARTA = ZoneId.of("Asia/Jakarta");
-    private static final BigDecimal UNKNOWN_MAX_SUPPLY_SENTINEL = new BigDecimal("-1");
     public static void main(String[] args) throws Exception {
         final StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
         // ===== checkpointing
@@ -48,22 +48,19 @@ public class MarketCapBronzeJob {
                         .filter(e -> e != null)
                         .map(out -> {
                             final ZonedDateTime now = ZonedDateTime.now(JAKARTA);
-                            out.ingestionDate = now.toLocalDate().toString();
-                            out.ingestionHour = String.format("%02d", now.getHour());
-                            if (out.maxSupply == null) {
-                                out.maxSupply = UNKNOWN_MAX_SUPPLY_SENTINEL;
-                            }
+                            out.setIngestionDate(now.toLocalDate().toString());
+                            out.setIngestionHour(String.format("%02d", now.getHour()));
                             return out;
                         })
                         .name("parse-debezium-and-enrich");
         // ===== debug
-        bronze.map(MarketCapBronze::toJson).name("debug-json").print();
+        bronze.map(ClickHouseJsonUtil::toJson).name("debug-json").print();
         // ===== Parquet sink
         final StreamingFileSink<MarketCapBronze> parquetSink =
                 StreamingFileSink
                         .forBulkFormat(
                                 new Path("s3a://bronze/market_caps"),
-                                ParquetAvroWriters.forReflectRecord(MarketCapBronze.class)
+                                ParquetAvroWriters.forSpecificRecord(MarketCapBronze.class)
                         )
                         .withBucketAssigner(
                                 new DateTimeBucketAssigner<>(
@@ -82,7 +79,7 @@ public class MarketCapBronzeJob {
         bronze.addSink(parquetSink).name("bronze-market-caps-parquet");
         // ===== ClickHouse sink
         bronze
-                .map(MarketCapBronze::toJson)
+                .map(ClickHouseJsonUtil::toJson)
                 .addSink(new ClickHouseHttpSink(
                         "http://clickhouse:8123",
                         "INSERT INTO bronze.market_caps FORMAT JSONEachRow",

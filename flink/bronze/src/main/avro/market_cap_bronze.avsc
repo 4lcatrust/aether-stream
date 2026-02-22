@@ -1,0 +1,38 @@
+{
+  "type": "record",
+  "name": "MarketCapBronze",
+  "namespace": "com.aetherstream.bronze.model",
+  "fields": [
+    { "name": "assetId", "type": "string" },
+    { "name": "symbol", "type": "string" },
+    { "name": "coinName", "type": "string" },
+    { "name": "currency", "type": "string" },
+    { "name": "marketCap",
+      "type": ["null", { "type": "bytes", "logicalType": "decimal", "precision": 38, "scale": 18 }],
+      "default": null
+    },
+    { "name": "circulatingSupply",
+      "type": ["null", { "type": "bytes", "logicalType": "decimal", "precision": 38, "scale": 18 }],
+      "default": null
+    },
+    { "name": "totalSupply",
+      "type": ["null", { "type": "bytes", "logicalType": "decimal", "precision": 38, "scale": 18 }],
+      "default": null
+    },
+    { "name": "maxSupply",
+      "type": ["null", { "type": "bytes", "logicalType": "decimal", "precision": 38, "scale": 18 }],
+      "default": null
+    },
+    { "name": "eventTimeMs", "type": "long" },
+    { "name": "sourceTsMs", "type": "long" },
+    { "name": "createdAtMs", "type": "long" },
+    { "name": "updatedAtMs", "type": ["null", "long"], "default": null },
+    { "name": "op", "type": "string" },
+    { "name": "lsn", "type": ["null", "long"], "default": null },
+    { "name": "sourceDb", "type": "string" },
+    { "name": "sourceSchema", "type": "string" },
+    { "name": "sourceTable", "type": "string" },
+    { "name": "ingestion_date", "type": "string" },
+    { "name": "ingestion_hour", "type": "string" }
+  ]
+}

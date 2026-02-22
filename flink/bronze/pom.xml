@@ -158,6 +158,26 @@
         </configuration>
       </plugin>
 
+      <!-- AVRO -->
+      <plugin>
+        <groupId>org.apache.avro</groupId>
+        <artifactId>avro-maven-plugin</artifactId>
+        <version>1.11.3</version>
+        <executions>
+          <execution>
+            <phase>generate-sources</phase>
+            <goals>
+              <goal>schema</goal>
+            </goals>
+            <configuration>
+              <sourceDirectory>${project.basedir}/src/main/avro</sourceDirectory>
+              <outputDirectory>${project.basedir}/target/generated-sources/avro</outputDirectory>
+              <stringType>String</stringType>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>      
+
       <!-- ================================================= -->
       <!-- SHADED JAR (ONLY Kafka + App code) -->
       <!-- ================================================= -->
