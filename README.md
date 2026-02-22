@@ -2,22 +2,18 @@
 
 ```mermaid
 flowchart LR
-  A[CoinGecko API] -->|write to| B[(Postgres)]
-  B -->|CDC| C[Debezium Connector]
-  C -->|events| D[(Kafka)]
-  D --> E[Flink - DataStream]
-  E -->|checks| F[Great Expectations - DQ validation]
-  E -->|lineage| G[OpenLineage]
-  E -->|sink 1| H[(ClickHouse)]
-  E -->|sink 2| I[(MinIO - raw/archive)]
-  subgraph J[Orchestration]
-    K[Airflow DAGs]
-  end
-  K --> E
-  K --> H
-  K --> I
+  A[CoinGecko API Poller] -->|insert| B[(Postgres)]
+  B -->|Logical Replication| C[Debezium]
+  C -->|CDC Events| D[(Kafka)]
+  D -->|JSON| E[Flink Bronze Jobs]
+  E -->|Parquet - Avro| F[(MinIO Bronze)]
+  E -->|JSONEachRow| G[(ClickHouse Bronze)]
+  G --> H[ClickHouse Silver MVs]
+  H --> I[ClickHouse Gold Tables]
+  I --> J[Operational Monitoring Views]
 ```
 
 - `sudo docker compose build flink-base`
 - `sudo docker compose build flink-bronze-market-prices`
+- `sudo docker compose build flink-bronze-market-caps`
 - `sudo docker compose up -d`
