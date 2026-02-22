@@ -123,7 +123,9 @@ CREATE OR REPLACE TABLE bronze.market_caps
 )
 ENGINE = MergeTree
 PARTITION BY ingestion_date
-ORDER BY (assetId, lsn);
+ORDER BY (assetId, lsn)
+TTL ingestion_date + INTERVAL 12 MONTH DELETE
+SETTINGS ttl_only_drop_parts = 1;
 
 CREATE OR REPLACE TABLE bronze.market_prices
 (
@@ -149,7 +151,9 @@ CREATE OR REPLACE TABLE bronze.market_prices
 )
 ENGINE = MergeTree
 PARTITION BY ingestion_date
-ORDER BY (assetId, lsn);
+ORDER BY (assetId, lsn)
+TTL ingestion_date + INTERVAL 12 MONTH DELETE
+SETTINGS ttl_only_drop_parts = 1;
 
 /* silver layer */
 CREATE DATABASE IF NOT EXISTS silver;
