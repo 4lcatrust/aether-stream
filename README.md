@@ -1,4 +1,4 @@
-# AetherStream (WIP)
+# AetherStream
 
 ```mermaid
 flowchart LR
@@ -14,6 +14,5 @@ flowchart LR
 ```
 
 - `sudo docker compose build flink-base`
-- `sudo docker compose build flink-bronze-market-prices`
-- `sudo docker compose build flink-bronze-market-caps`
+- `sudo docker compose build flink-bronze-image`
 - `sudo docker compose up -d`
