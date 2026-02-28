@@ -2,14 +2,11 @@
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
                              http://maven.apache.org/xsd/maven-4.0.0.xsd">
-
   <modelVersion>4.0.0</modelVersion>
-
   <groupId>com.aetherstream</groupId>
   <artifactId>flink-bronze</artifactId>
   <version>0.1.0</version>
   <packaging>jar</packaging>
-
   <!-- ===================================================== -->
   <!-- Properties -->
   <!-- ===================================================== -->
@@ -18,13 +15,22 @@
     <flink.version>1.18.0</flink.version>
     <parquet.version>1.13.1</parquet.version>
     <hadoop.version>3.3.4</hadoop.version>
+    <confluent.version>7.6.0</confluent.version>
   </properties>
-
+  <!-- ===================================================== -->
+  <!-- Repository -->
+  <!-- ===================================================== -->
+  <repositories>
+    <repository>
+      <id>confluent</id>
+      <name>Confluent</name>
+      <url>https://packages.confluent.io/maven/</url>
+    </repository>
+  </repositories>
   <!-- ===================================================== -->
   <!-- Dependencies -->
   <!-- ===================================================== -->
   <dependencies>
-
     <!-- ================= Flink Core (provided) ================= -->
     <dependency>
       <groupId>org.apache.flink</groupId>
@@ -32,21 +38,18 @@
       <version>${flink.version}</version>
       <scope>provided</scope>
     </dependency>
-
     <dependency>
       <groupId>org.apache.flink</groupId>
       <artifactId>flink-clients</artifactId>
       <version>${flink.version}</version>
       <scope>provided</scope>
     </dependency>
-
     <!-- ================= Kafka Source (MUST be shaded) ================= -->
     <dependency>
       <groupId>org.apache.flink</groupId>
       <artifactId>flink-connector-kafka</artifactId>
       <version>3.1.0-1.18</version>
     </dependency>
-
     <!-- ================= File Sink API (provided) ================= -->
     <dependency>
       <groupId>org.apache.flink</groupId>
@@ -54,79 +57,66 @@
       <version>${flink.version}</version>
       <scope>provided</scope>
     </dependency>
-
     <!-- ================= Avro Sink API (provided) ================= -->
     <dependency>
       <groupId>org.apache.flink</groupId>
       <artifactId>flink-avro</artifactId>
       <version>${flink.version}</version>
     </dependency>
-
     <!-- ================= Parquet Sink API (provided) ================= -->
     <dependency>
       <groupId>org.apache.flink</groupId>
       <artifactId>flink-parquet</artifactId>
       <version>${flink.version}</version>
     </dependency>
-
     <!-- ================= ParquetAvroWriters Sink API (provided) ================= -->
     <dependency>
       <groupId>org.apache.parquet</groupId>
       <artifactId>parquet-avro</artifactId>
       <version>${parquet.version}</version>
     </dependency>
-
     <!-- ================= S3A Client (runtime, NOT shaded) ================= -->
     <dependency>
       <groupId>org.apache.hadoop</groupId>
       <artifactId>hadoop-common</artifactId>
       <version>${hadoop.version}</version>
     </dependency>
-
     <dependency>
       <groupId>org.apache.hadoop</groupId>
       <artifactId>hadoop-aws</artifactId>
       <version>${hadoop.version}</version>
     </dependency>
-
     <dependency>
       <groupId>com.amazonaws</groupId>
       <artifactId>aws-java-sdk-bundle</artifactId>
       <version>1.12.262</version>
     </dependency>
-
     <dependency>
       <groupId>org.apache.hadoop</groupId>
       <artifactId>hadoop-mapreduce-client-core</artifactId>
       <version>${hadoop.version}</version>
     </dependency>
-
     <dependency>
       <groupId>org.apache.hadoop</groupId>
       <artifactId>hadoop-mapreduce-client-common</artifactId>
       <version>${hadoop.version}</version>
     </dependency>
-
-
     <!-- ================= JSON ================= -->
     <dependency>
       <groupId>com.fasterxml.jackson.core</groupId>
       <artifactId>jackson-databind</artifactId>
       <version>2.16.1</version>
     </dependency>
-
     <dependency>
       <groupId>com.fasterxml.jackson.datatype</groupId>
       <artifactId>jackson-datatype-jsr310</artifactId>
       <version>2.16.1</version>
     </dependency>
-
     <dependency>
       <groupId>org.apache.httpcomponents.client5</groupId>
       <artifactId>httpclient5</artifactId>
       <version>5.2.1</version>
     </dependency>
-
     <!-- ================= Logging (provided by Flink) ================= -->
     <dependency>
       <groupId>org.slf4j</groupId>
@@ -134,19 +124,25 @@
       <version>2.0.9</version>
       <scope>provided</scope>
     </dependency>
-
+    <!-- ================= Confluent Schema Registry (Flink integration) ================= -->
+    <dependency>
+      <groupId>org.apache.flink</groupId>
+      <artifactId>flink-avro-confluent-registry</artifactId>
+      <version>${flink.version}</version>
+    </dependency>
+    <!-- ================= Confluent Avro serializer (runtime classes used by registry serde) ================= -->
+    <dependency>
+      <groupId>io.confluent</groupId>
+      <artifactId>kafka-avro-serializer</artifactId>
+      <version>${confluent.version}</version>
+    </dependency>
   </dependencies>
-
   <!-- ===================================================== -->
   <!-- Build -->
   <!-- ===================================================== -->
   <build>
-
-    <!-- SINGLE deterministic output -->
     <finalName>bronze-jobs</finalName>
-
     <plugins>
-
       <!-- Java 17 -->
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
@@ -157,7 +153,6 @@
           <target>${java.version}</target>
         </configuration>
       </plugin>
-
       <!-- AVRO -->
       <plugin>
         <groupId>org.apache.avro</groupId>
@@ -177,7 +172,6 @@
           </execution>
         </executions>
       </plugin>      
-
       <!-- ================================================= -->
       <!-- SHADED JAR (ONLY Kafka + App code) -->
       <!-- ================================================= -->
@@ -192,11 +186,7 @@
               <goal>shade</goal>
             </goals>
             <configuration>
-
-              <!-- DO NOT create dependency-reduced POM -->
               <createDependencyReducedPom>false</createDependencyReducedPom>
-
-              <!-- Avoid META-INF signature conflicts -->
               <filters>
                 <filter>
                   <artifact>*:*</artifact>
@@ -211,8 +201,6 @@
           </execution>
         </executions>
       </plugin>
-
     </plugins>
   </build>
-
 </project>

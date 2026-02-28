@@ -16,6 +16,9 @@ import org.apache.flink.streaming.api.functions.sink.filesystem.OutputFileConfig
 import org.apache.flink.streaming.api.functions.sink.filesystem.StreamingFileSink;
 import org.apache.flink.streaming.api.functions.sink.filesystem.bucketassigners.DateTimeBucketAssigner;
 import org.apache.flink.streaming.api.functions.sink.filesystem.rollingpolicies.OnCheckpointRollingPolicy;
+import org.apache.flink.connector.kafka.sink.KafkaSink;
+import org.apache.flink.connector.kafka.sink.KafkaRecordSerializationSchema;
+import org.apache.flink.formats.avro.registry.confluent.ConfluentRegistryAvroSerializationSchema;
 import org.apache.kafka.clients.consumer.OffsetResetStrategy;
 import java.math.BigDecimal;
 import java.time.ZoneId;
@@ -23,6 +26,9 @@ import java.time.ZonedDateTime;
 public class MarketCapBronzeJob {
     private static final String TOPIC = "aether_pg.public.market_caps";
     private static final String GROUP_ID = "flink-bronze-market-caps";
+    private static final String BRONZE_AVRO_TOPIC = "bronze.market_caps.avro";
+    private static final String SCHEMA_REGISTRY_URL = "http://schema-registry:8081";
+    private static final String SR_SUBJECT_MARKET_CAPS = BRONZE_AVRO_TOPIC + "-value";
     private static final ZoneId JAKARTA = ZoneId.of("Asia/Jakarta");
     public static void main(String[] args) throws Exception {
         final StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
@@ -55,6 +61,24 @@ public class MarketCapBronzeJob {
                         .name("parse-debezium-and-enrich");
         // ===== debug
         bronze.map(ClickHouseJsonUtil::toJson).name("debug-json").print();
+        // ===== Kafka sink (Avro + Schema Registry)
+        final KafkaSink<MarketCapBronze> avroKafkaSink =
+                KafkaSink.<MarketCapBronze>builder()
+                        .setBootstrapServers("kafka:9092")
+                        .setRecordSerializer(
+                                KafkaRecordSerializationSchema.builder()
+                                        .setTopic(BRONZE_AVRO_TOPIC)
+                                        .setValueSerializationSchema(
+                                                ConfluentRegistryAvroSerializationSchema.forSpecific(
+                                                        MarketCapBronze.class,
+                                                        SR_SUBJECT_MARKET_CAPS,
+                                                        SCHEMA_REGISTRY_URL
+                                                )
+                                        )
+                                        .build()
+                        )
+                        .build();
+        bronze.sinkTo(avroKafkaSink).name("bronze-market-caps-kafka-avro-sr");
         // ===== Parquet sink
         final StreamingFileSink<MarketCapBronze> parquetSink =
                 StreamingFileSink

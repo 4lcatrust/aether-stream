@@ -139,6 +139,8 @@ services:
       cub kafka-ready -b kafka:9092 1 30;
       kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic aether_pg.public.market_prices --partitions 1 --replication-factor 1;
       kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic aether_pg.public.market_caps --partitions 1 --replication-factor 1;
+      kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic bronze.market_prices.avro --partitions 1 --replication-factor 1;
+      kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic bronze.market_caps.avro --partitions 1 --replication-factor 1;
       echo 'Topic ready';
       "
     networks:
@@ -233,6 +235,9 @@ services:
     networks:
       - aether-net
 
+  # ============================
+  # Flink Base
+  # ============================
   flink-base:
     build:
       context: ./flink/base
@@ -314,6 +319,10 @@ services:
     networks:
       - aether-net
 
+  # ============================
+  # Flink Jobs
+  # ============================
+
   flink-bronze-market-prices:
     image: aether-flink-bronze:latest
     container_name: aether-flink-bronze-market-prices
@@ -327,6 +336,8 @@ services:
       flink-jobmanager:
         condition: service_healthy
       flink-taskmanager:
+        condition: service_healthy
+      schema-registry:
         condition: service_healthy
     entrypoint:
       - /bin/sh
@@ -355,6 +366,8 @@ services:
       flink-jobmanager:
         condition: service_healthy
       flink-taskmanager:
+        condition: service_healthy
+      schema-registry:
         condition: service_healthy
     entrypoint:
       - /bin/sh
@@ -391,3 +404,27 @@ services:
     restart: always
     networks:
       - aether-net
+
+  # ============================
+  # Schema Registry
+  # ============================
+  schema-registry:
+    image: confluentinc/cp-schema-registry:7.6.0
+    container_name: aether-schema-registry
+    hostname: schema-registry
+    depends_on:
+      kafka:
+        condition: service_healthy
+    ports:
+      - "8085:8081"
+    environment:
+      SCHEMA_REGISTRY_HOST_NAME: schema-registry
+      SCHEMA_REGISTRY_LISTENERS: http://0.0.0.0:8081
+      SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS: PLAINTEXT://kafka:9092
+    networks:
+      - aether-net
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8081/subjects >/dev/null || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
