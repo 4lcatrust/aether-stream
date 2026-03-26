@@ -369,6 +369,8 @@ services:
         condition: service_healthy
       schema-registry:
         condition: service_healthy
+      connect-init:
+        condition: service_completed_successfully
     entrypoint:
       - /bin/sh
       - -c
@@ -399,6 +401,8 @@ services:
         condition: service_healthy
       schema-registry:
         condition: service_healthy
+      connect-init:
+        condition: service_completed_successfully
     entrypoint:
       - /bin/sh
       - -c

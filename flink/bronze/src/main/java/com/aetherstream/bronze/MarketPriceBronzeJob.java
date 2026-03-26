@@ -19,6 +19,11 @@ import org.apache.flink.streaming.api.functions.sink.filesystem.rollingpolicies.
 import org.apache.flink.connector.kafka.sink.KafkaSink;
 import org.apache.flink.connector.kafka.sink.KafkaRecordSerializationSchema;
 import org.apache.flink.formats.avro.registry.confluent.ConfluentRegistryAvroSerializationSchema;
+import org.apache.flink.formats.avro.registry.confluent.ConfluentRegistryAvroDeserializationSchema;
+import org.apache.avro.generic.GenericRecord;
+import io.confluent.kafka.schemaregistry.client.CachedSchemaRegistryClient;
+import io.confluent.kafka.schemaregistry.client.SchemaRegistryClient;
+import org.apache.avro.Schema;
 import org.apache.kafka.clients.consumer.OffsetResetStrategy;
 import java.math.BigDecimal;
 import java.time.ZoneId;
@@ -39,13 +44,22 @@ public class MarketPriceBronzeJob {
         env.getCheckpointConfig().setCheckpointingMode(CheckpointingMode.EXACTLY_ONCE);
         env.getCheckpointConfig().setMaxConcurrentCheckpoints(1);
         // ===== kafka CDC source
-        final KafkaSource<String> source =
-                KafkaSource.<String>builder()
+        SchemaRegistryClient srClient = new CachedSchemaRegistryClient(SCHEMA_REGISTRY_URL, 100);
+        Schema readerSchema = new Schema.Parser().parse(
+                srClient.getLatestSchemaMetadata(TOPIC + "-value").getSchema()
+        );
+        final KafkaSource<GenericRecord> source =
+                KafkaSource.<GenericRecord>builder()
                         .setBootstrapServers("kafka:9092")
                         .setTopics(TOPIC)
                         .setGroupId(GROUP_ID)
                         .setStartingOffsets(OffsetsInitializer.committedOffsets(OffsetResetStrategy.EARLIEST))
-                        .setValueOnlyDeserializer(new SimpleStringSchema())
+                        .setValueOnlyDeserializer(
+                                ConfluentRegistryAvroDeserializationSchema.forGeneric(
+                                        readerSchema,
+                                        SCHEMA_REGISTRY_URL
+                                )
+                        )
                         .build();
         // ===== transform Debezium -> Bronze
         final DataStream<MarketPriceBronze> bronze =

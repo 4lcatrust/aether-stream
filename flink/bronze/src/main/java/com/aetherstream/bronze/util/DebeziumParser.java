@@ -1,24 +1,22 @@
 package com.aetherstream.bronze.util;
 import com.aetherstream.bronze.model.MarketCapBronze;
 import com.aetherstream.bronze.model.MarketPriceBronze;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import org.apache.avro.generic.GenericRecord;
 import java.math.BigDecimal;
 import static com.aetherstream.bronze.util.AvroDecimalUtil.toBytes;
 public class DebeziumParser {
-    private static final ObjectMapper mapper = new ObjectMapper();
     // =========================================================
     // Market Prices
     // =========================================================
-    public static MarketPriceBronze parseMarketPrice(String json) throws Exception {
-        JsonNode root = mapper.readTree(json);
-        String op = textOrNull(root, "op");
+    public static MarketPriceBronze parseMarketPrice(GenericRecord record) throws Exception {
+        if (record == null) return null;
+        String op = textOrNull(record, "op");
         if (op == null) return null;
-        JsonNode source = root.get("source");
-        JsonNode payload = op.equals("d") ? root.get("before") : root.get("after");
-        if (payload == null || payload.isNull() || source == null || source.isNull()) {
-            return null;
-        }
+        GenericRecord source  = (GenericRecord) record.get("source");
+        GenericRecord payload = op.equals("d")
+                ? (GenericRecord) record.get("before")
+                : (GenericRecord) record.get("after");
+        if (payload == null || source == null) return null;
         MarketPriceBronze out = new MarketPriceBronze();
         // ===== source columns =====
         out.setAssetId(textOrNull(payload, "asset_id"));
@@ -30,12 +28,11 @@ public class DebeziumParser {
         out.setVolume24h(toBytes(decimalOrNull(payload, "volume_24h")));
         out.setCoinImage(textOrNull(payload, "coin_image"));
         out.setEventTimeMs(timestampToMillis(payload, "event_time"));
+        out.setSourceTsMs(timestampToMillis(payload, "source_ts"));
         out.setCreatedAtMs(timestampToMillis(payload, "created_at"));
-        out.setUpdatedAtMs(timestampToMillis(payload, "updated_at"));
         // ===== CDC metadata =====
         out.setOp(op);
         out.setLsn(longOrNull(source, "lsn"));
-        out.setSourceTsMs(longOrNull(source, "ts_ms"));
         out.setSourceDb(textOrNull(source, "db"));
         out.setSourceSchema(textOrNull(source, "schema"));
         out.setSourceTable(textOrNull(source, "table"));
@@ -44,15 +41,15 @@ public class DebeziumParser {
     // =========================================================
     // Market Caps
     // =========================================================
-    public static MarketCapBronze parseMarketCap(String json) throws Exception {
-        JsonNode root = mapper.readTree(json);
-        String op = textOrNull(root, "op");
+    public static MarketCapBronze parseMarketCap(GenericRecord record) throws Exception {
+        if (record == null) return null;
+        String op = textOrNull(record, "op");
         if (op == null) return null;
-        JsonNode source = root.get("source");
-        JsonNode payload = op.equals("d") ? root.get("before") : root.get("after");
-        if (payload == null || payload.isNull() || source == null || source.isNull()) {
-            return null;
-        }
+        GenericRecord source  = (GenericRecord) record.get("source");
+        GenericRecord payload = op.equals("d")
+                ? (GenericRecord) record.get("before")
+                : (GenericRecord) record.get("after");
+        if (payload == null || source == null) return null;
         MarketCapBronze out = new MarketCapBronze();
         // ===== source columns =====
         out.setAssetId(textOrNull(payload, "asset_id"));
@@ -65,7 +62,6 @@ public class DebeziumParser {
         out.setMaxSupply(toBytes(decimalOrNull(payload, "max_supply")));
         out.setEventTimeMs(timestampToMillis(payload, "event_time"));
         out.setCreatedAtMs(timestampToMillis(payload, "created_at"));
-        out.setUpdatedAtMs(timestampToMillis(payload, "updated_at"));
         // ===== CDC metadata =====
         out.setOp(op);
         out.setLsn(longOrNull(source, "lsn"));
@@ -76,45 +72,42 @@ public class DebeziumParser {
         return out;
     }
     // =========================================================
-    // Helpers
+    // Helpers — GenericRecord
     // =========================================================
-    private static String textOrNull(JsonNode node, String field) {
-        JsonNode v = node.get(field);
-        return (v == null || v.isNull()) ? null : v.asText();
+    private static String textOrNull(GenericRecord record, String field) {
+        Object v = record.get(field);
+        if (v == null) return null;
+        String s = v.toString();
+        return s.isEmpty() ? null : s;
     }
-    private static Long longOrNull(JsonNode node, String field) {
-        JsonNode v = node.get(field);
-        if (v == null || v.isNull()) return null;
-        if (v.isNumber()) return v.asLong();
-        String s = v.asText();
-        return (s == null || s.isEmpty()) ? null : Long.parseLong(s);
+    private static Long longOrNull(GenericRecord record, String field) {
+        Object v = record.get(field);
+        if (v == null) return null;
+        if (v instanceof Long)    return (Long) v;
+        if (v instanceof Integer) return ((Integer) v).longValue();
+        String s = v.toString();
+        return s.isEmpty() ? null : Long.parseLong(s);
     }
-    private static BigDecimal decimalOrNull(JsonNode node, String field) {
-        JsonNode v = node.get(field);
-        if (v == null || v.isNull()) return null;
-        String s = v.asText();
-        if (s == null || s.isEmpty()) return null;
+    private static BigDecimal decimalOrNull(GenericRecord record, String field) {
+        Object v = record.get(field);
+        if (v == null) return null;
+        String s = v.toString();
+        if (s.isEmpty()) return null;
         try {
             return new BigDecimal(s);
         } catch (Exception e) {
             return null;
         }
     }
-    private static Long timestampToMillis(JsonNode node, String field) {
-        JsonNode v = node.get(field);
-        if (v == null || v.isNull()) return null;
+    private static Long timestampToMillis(GenericRecord record, String field) {
+        Object v = record.get(field);
+        if (v == null) return null;
         try {
-            if (v.isTextual()) {
-                return java.time.OffsetDateTime.parse(v.asText())
-                        .toInstant()
-                        .toEpochMilli();
-            }
-            if (v.isObject() && v.has("value")) {
-                return java.time.OffsetDateTime.parse(v.get("value").asText())
-                        .toInstant()
-                        .toEpochMilli();
-            }
+            return java.time.OffsetDateTime.parse(v.toString())
+                    .toInstant()
+                    .toEpochMilli();
         } catch (Exception ignored) {}
+        if (v instanceof Long) return (Long) v / 1000;
         return null;
     }
 }
