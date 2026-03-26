@@ -1,4 +1,5 @@
 .mc
+.env
 data/minio/.minio.sys/*
 data/minio/bronze/*
 data/minio/flink-*/*
