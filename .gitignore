@@ -14,3 +14,6 @@ __pycache__/*.pyc
 dags/.DS_Store
 dags/__pycache__/*
 pat.key
+data/prometheus/*
+data/grafana/*
+grafana/dashboards/*.json.bak
