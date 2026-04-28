@@ -55,6 +55,7 @@ services:
     ports:
       - "8123:8123"
       - "9002:9000"
+      - "9363:9363"
     environment:
       CLICKHOUSE_DB: aether
       CLICKHOUSE_USER: aether
@@ -64,6 +65,7 @@ services:
       - clickhouse_data:/var/lib/clickhouse
       - clickhouse_logs:/var/log/clickhouse-server
       - ./clickhouse/initdb:/docker-entrypoint-initdb.d:ro
+      - ./clickhouse/config.d:/etc/clickhouse-server/config.d:ro
     ulimits:
       nofile:
         soft: 262144
@@ -246,6 +248,7 @@ services:
     environment:
       MINIO_ROOT_USER: minioadmin
       MINIO_ROOT_PASSWORD: minioadmin
+      MINIO_PROMETHEUS_AUTH_TYPE: public
     command: server /data --address ":9000" --console-address ":9001"
     volumes:
       - ./data/minio:/data
@@ -262,6 +265,7 @@ services:
     environment:
       MINIO_ROOT_USER: minioadmin
       MINIO_ROOT_PASSWORD: minioadmin
+      MINIO_PROMETHEUS_AUTH_TYPE: public
       MINIO_ENDPOINT: http://minio:9000
     entrypoint: ["/bin/sh", "/minio/init.sh"]
     networks:
@@ -472,7 +476,7 @@ services:
       timeout: 5s
       retries: 30
 
-# ============================
+  # ============================
   # Prometheus
   # ============================
   prometheus:
@@ -496,6 +500,27 @@ services:
       interval: 10s
       timeout: 5s
       retries: 20
+
+  # ============================
+  # Kafka Exporter (consumer lag)
+  # ============================
+  kafka-exporter:
+    image: danielqsj/kafka-exporter:v1.7.0
+    container_name: aether-kafka-exporter
+    hostname: kafka-exporter
+    depends_on:
+      kafka:
+        condition: service_healthy
+    command:
+      - '--kafka.server=kafka:9092'
+      - '--web.listen-address=:9308'
+    networks:
+      - aether-net
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:9308/metrics >/dev/null 2>&1 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
 
   # ============================
   # Grafana
