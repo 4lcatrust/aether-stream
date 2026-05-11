@@ -121,8 +121,8 @@ public class MarketCapBronzeJob {
                 .addSink(new ClickHouseHttpSink(
                         "http://clickhouse:8123",
                         "INSERT INTO bronze.market_caps FORMAT JSONEachRow",
-                        "aether",
-                        "aether"
+                        System.getenv().getOrDefault("CLICKHOUSE_USER", "aether"),
+                        System.getenv().getOrDefault("CLICKHOUSE_PASSWORD", "aether")
                 ))
                 .name("bronze-market-caps-clickhouse");
         env.execute("AetherStream Bronze: market_caps");

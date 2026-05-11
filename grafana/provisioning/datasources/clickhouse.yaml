@@ -10,9 +10,9 @@ datasources:
       port: 9000
       protocol: native
       secure: false
-      username: aether
+      username: $CLICKHOUSE_USER
       defaultDatabase: omt
       tlsSkipVerify: true
     secureJsonData:
-      password: aether
+      password: $CLICKHOUSE_PASSWORD
     editable: false

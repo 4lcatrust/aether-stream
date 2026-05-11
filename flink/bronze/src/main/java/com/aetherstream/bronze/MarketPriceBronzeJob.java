@@ -121,8 +121,8 @@ public class MarketPriceBronzeJob {
                 .addSink(new ClickHouseHttpSink(
                         "http://clickhouse:8123",
                         "INSERT INTO bronze.market_prices FORMAT JSONEachRow",
-                        "aether",
-                        "aether"
+                        System.getenv().getOrDefault("CLICKHOUSE_USER", "aether"),
+                        System.getenv().getOrDefault("CLICKHOUSE_PASSWORD", "aether")
                 ))
                 .name("bronze-market-prices-clickhouse");
         env.execute("AetherStream Bronze: market_prices");
