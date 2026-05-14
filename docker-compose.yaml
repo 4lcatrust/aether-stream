@@ -82,35 +82,6 @@ services:
       start_period: 20s
 
   # ============================
-  # Iceberg
-  # ============================
-  iceberg-rest:
-    image: apache/iceberg-rest-fixture
-    container_name: aether-iceberg-rest
-    hostname: iceberg-rest
-    ports:
-      - "8181:8181"
-    environment:
-          - AWS_ACCESS_KEY_ID=${MINIO_ROOT_USER}
-          - AWS_SECRET_ACCESS_KEY=${MINIO_ROOT_PASSWORD}
-          - AWS_REGION=us-east-1
-          - CATALOG_WAREHOUSE=s3://warehouse/
-          - CATALOG_IO__IMPL=org.apache.iceberg.aws.s3.S3FileIO
-          - CATALOG_S3_ENDPOINT=http://minio:9000
-    depends_on:
-      minio:
-        condition: service_started
-      minio-init:
-        condition: service_completed_successfully
-    networks:
-      - aether-net
-    healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://localhost:8181/v1/config >/dev/null || exit 1"]
-      interval: 5s
-      timeout: 5s
-      retries: 30
-
-  # ============================
   # Zookeeper
   # ============================
   zookeeper:

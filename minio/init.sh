@@ -11,9 +11,7 @@ echo "Connected to MinIO"
 mc mb --ignore-existing local/bronze
 mc mb --ignore-existing local/flink-checkpoints
 mc mb --ignore-existing local/flink-savepoints
-mc mb --ignore-existing local/warehouse
 mc anonymous set download local/bronze || true
 mc anonymous set download local/flink-checkpoints || true
 mc anonymous set download local/flink-savepoints || true
-mc anonymous set download local/warehouse || true
 echo "MinIO init complete!"
