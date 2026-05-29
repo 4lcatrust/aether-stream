@@ -11,7 +11,6 @@ echo "Connected to MinIO"
 mc mb --ignore-existing local/bronze
 mc mb --ignore-existing local/flink-checkpoints
 mc mb --ignore-existing local/flink-savepoints
-mc anonymous set download local/bronze || true
-mc anonymous set download local/flink-checkpoints || true
-mc anonymous set download local/flink-savepoints || true
+# Buckets stay private: Flink authenticates via fs.s3a credentials and
+# ClickHouse via the `minio` named collection. No anonymous access is granted.
 echo "MinIO init complete!"

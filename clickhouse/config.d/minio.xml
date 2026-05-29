@@ -1,0 +1,8 @@
+<clickhouse>
+    <named_collections>
+        <minio>
+            <access_key_id from_env="MINIO_ROOT_USER"/>
+            <secret_access_key from_env="MINIO_ROOT_PASSWORD"/>
+        </minio>
+    </named_collections>
+</clickhouse>
