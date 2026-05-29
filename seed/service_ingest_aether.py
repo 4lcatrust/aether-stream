@@ -13,13 +13,6 @@ PARAMS                  = {
                             "page": 1,
                             "sparkline": "false",
                         }
-DB_CONFIG               = {
-                            "host":     os.environ["PGHOST"],
-                            "port":     int(os.environ.get("PGPORT", "5432")),
-                            "dbname":   os.environ["PGDATABASE"],
-                            "user":     os.environ["PGUSER"],
-                            "password": os.environ["PGPASSWORD"],
-                        }
 STATEMENT_TIMEOUT       = "10s"
 POLL_INTERVAL           = int(os.environ.get("POLL_INTERVAL", "60"))
 MAX_API_RETRIES         = 5
@@ -84,6 +77,15 @@ DO NOTHING;
 # ============================================================
 def parse_market_ts(ts_str: str) -> datetime:
     return datetime.fromisoformat(ts_str.replace("Z", "+00:00"))
+
+def load_db_config() -> dict:
+    return {
+        "host":     os.environ["PGHOST"],
+        "port":     int(os.environ.get("PGPORT", "5432")),
+        "dbname":   os.environ["PGDATABASE"],
+        "user":     os.environ["PGUSER"],
+        "password": os.environ["PGPASSWORD"],
+    }
 
 # ============================================================
 # Single Execution Cycle (your original logic)
@@ -158,12 +160,13 @@ def run_once(conn):
 # ============================================================
 def main():
     log.info("Starting continuous ingestion service")
+    db_config = load_db_config()
     conn = None
     while RUNNING:
         try:
             if conn is None or conn.closed:
                 log.info("Opening PostgreSQL connection...")
-                conn = psycopg2.connect(**DB_CONFIG)
+                conn = psycopg2.connect(**db_config)
                 conn.autocommit = False
                 with conn.cursor() as cur:
                     cur.execute(f"SET statement_timeout = '{STATEMENT_TIMEOUT}';")

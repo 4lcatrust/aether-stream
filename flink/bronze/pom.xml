@@ -136,6 +136,13 @@
       <artifactId>kafka-avro-serializer</artifactId>
       <version>${confluent.version}</version>
     </dependency>
+    <!-- ================= Test ================= -->
+    <dependency>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter</artifactId>
+      <version>5.10.2</version>
+      <scope>test</scope>
+    </dependency>
   </dependencies>
   <!-- ===================================================== -->
   <!-- Build -->
@@ -172,6 +179,12 @@
           </execution>
         </executions>
       </plugin>      
+      <!-- Surefire (JUnit 5) -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-surefire-plugin</artifactId>
+        <version>3.2.5</version>
+      </plugin>
       <!-- ================================================= -->
       <!-- SHADED JAR (ONLY Kafka + App code) -->
       <!-- ================================================= -->
