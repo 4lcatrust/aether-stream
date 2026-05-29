@@ -1,0 +1,173 @@
+apiVersion: 1
+
+groups:
+  - orgId: 1
+    name: pipeline-health
+    folder: AetherStream
+    interval: 1m
+    rules:
+      # ===========================================================
+      # Data freshness: alert when gold tables stop receiving data.
+      # Backed by omt.pipeline_health (computes lag against now()).
+      # ===========================================================
+      - uid: aether-pipeline-lag-stale
+        title: Pipeline data stale
+        condition: C
+        for: 5m
+        noDataState: OK
+        execErrState: Error
+        labels:
+          severity: critical
+          component: pipeline
+        annotations:
+          summary: Gold tables have not received fresh events
+          description: >
+            Max event-time lag across gold tables exceeded 30 minutes
+            (omt.pipeline_health). CDC -> Flink -> ClickHouse flow is likely stalled.
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: aether-clickhouse
+            model:
+              refId: A
+              datasource:
+                type: grafana-clickhouse-datasource
+                uid: aether-clickhouse
+              queryType: table
+              format: 1
+              rawSql: SELECT toFloat64(max(minutes_lag)) AS value FROM omt.pipeline_health
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: reduce
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: A
+              reducer: last
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: B
+              conditions:
+                - evaluator:
+                    type: gt
+                    params: [30]
+
+      # ===========================================================
+      # Reconciliation: ClickHouse bronze vs MinIO Parquet landing zone.
+      # Backed by omt.sink_validation (row count + lsn + checksum).
+      # ===========================================================
+      - uid: aether-sink-validation-mismatch
+        title: Sink validation mismatch
+        condition: C
+        for: 10m
+        noDataState: OK
+        execErrState: Error
+        labels:
+          severity: critical
+          component: reconciliation
+        annotations:
+          summary: ClickHouse bronze diverges from MinIO landing zone
+          description: >
+            One or more tables reported validation_status != 'HEALTHY' in
+            omt.sink_validation (row-count, LSN range, or checksum drift).
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: aether-clickhouse
+            model:
+              refId: A
+              datasource:
+                type: grafana-clickhouse-datasource
+                uid: aether-clickhouse
+              queryType: table
+              format: 1
+              rawSql: SELECT toFloat64(countIf(validation_status != 'HEALTHY')) AS value FROM omt.sink_validation
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: reduce
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: A
+              reducer: last
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: B
+              conditions:
+                - evaluator:
+                    type: gt
+                    params: [0]
+
+      # ===========================================================
+      # Backpressure: Flink bronze consumer groups falling behind Kafka.
+      # ===========================================================
+      - uid: aether-flink-consumer-lag
+        title: Flink consumer lag high
+        condition: C
+        for: 10m
+        noDataState: OK
+        execErrState: Error
+        labels:
+          severity: warning
+          component: flink
+        annotations:
+          summary: Flink bronze jobs are lagging behind Kafka
+          description: >
+            Total consumer lag across flink-bronze-* groups exceeded 1000 messages
+            for 10 minutes. Flink is not keeping up with CDC throughput.
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: PBFA97CFB590B2093
+            model:
+              refId: A
+              datasource:
+                type: prometheus
+                uid: PBFA97CFB590B2093
+              expr: sum(kafka_consumergroup_lag{consumergroup=~"flink-bronze-.*"})
+              instant: true
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: reduce
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: A
+              reducer: last
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: B
+              conditions:
+                - evaluator:
+                    type: gt
+                    params: [1000]
