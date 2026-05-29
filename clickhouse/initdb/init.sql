@@ -22,10 +22,9 @@ SELECT
     ingestion_date,
     hour AS ingestion_hour
 FROM s3(
- minio,
- url = 'http://minio:9000/bronze/market_caps/*/*/*.parquet',
- format = 'Parquet',
- structure = 'assetId String,
+ 'http://minio:9000/bronze/market_caps/*/*/*.parquet',
+ 'Parquet',
+ 'assetId String,
   symbol String,
   coinName String,
   currency String,
@@ -69,10 +68,9 @@ SELECT
     ingestion_date,
     hour AS ingestion_hour
 FROM s3(
- minio,
- url = 'http://minio:9000/bronze/market_prices/*/*/*.parquet',
- format = 'Parquet',
- structure = 'assetId String,
+ 'http://minio:9000/bronze/market_prices/*/*/*.parquet',
+ 'Parquet',
+ 'assetId String,
   symbol String,
   coinName String,
   currency String,
