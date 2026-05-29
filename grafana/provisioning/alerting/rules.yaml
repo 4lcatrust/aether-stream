@@ -119,6 +119,62 @@ groups:
                     params: [0]
 
       # ===========================================================
+      # Data quality: malformed CDC records landing on dead-letter topics.
+      # current_offset only grows, so alert on new arrivals in the window.
+      # ===========================================================
+      - uid: aether-dlq-records
+        title: Dead-letter records arriving
+        condition: C
+        for: 0m
+        noDataState: OK
+        execErrState: Error
+        labels:
+          severity: warning
+          component: reconciliation
+        annotations:
+          summary: Bronze jobs are rejecting CDC records
+          description: >
+            New records arrived on a bronze.*.dlq topic in the last 10 minutes,
+            meaning the Flink jobs could not parse some CDC events. Inspect the
+            dead-letter topics for the rejection reason.
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: PBFA97CFB590B2093
+            model:
+              refId: A
+              datasource:
+                type: prometheus
+                uid: PBFA97CFB590B2093
+              expr: sum(increase(kafka_topic_partition_current_offset{topic=~"bronze\\..*\\.dlq"}[10m]))
+              instant: true
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: reduce
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: A
+              reducer: last
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: B
+              conditions:
+                - evaluator:
+                    type: gt
+                    params: [0]
+
+      # ===========================================================
       # Backpressure: Flink bronze consumer groups falling behind Kafka.
       # ===========================================================
       - uid: aether-flink-consumer-lag
