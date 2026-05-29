@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import logging, requests, psycopg2, signal, time, random
+import os, logging, requests, psycopg2, signal, time, random
 from datetime import datetime, timezone
 from psycopg2.extras import DictCursor
 # ============================================================
@@ -14,14 +14,14 @@ PARAMS                  = {
                             "sparkline": "false",
                         }
 DB_CONFIG               = {
-                            "host": "postgres",
-                            "port": 5432,
-                            "dbname": "aether",
-                            "user": "aether",
-                            "password": "aether",
+                            "host":     os.environ["PGHOST"],
+                            "port":     int(os.environ.get("PGPORT", "5432")),
+                            "dbname":   os.environ["PGDATABASE"],
+                            "user":     os.environ["PGUSER"],
+                            "password": os.environ["PGPASSWORD"],
                         }
 STATEMENT_TIMEOUT       = "10s"
-POLL_INTERVAL           = 60
+POLL_INTERVAL           = int(os.environ.get("POLL_INTERVAL", "60"))
 MAX_API_RETRIES         = 5
 INITIAL_BACKOFF         = 2
 # ============================================================
