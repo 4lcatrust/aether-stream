@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  java-tests:
+    name: Flink bronze (JUnit)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: flink/bronze
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: maven
+      - name: Run tests
+        run: mvn -B test
+
+  python-tests:
+    name: Ingest service (pytest)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r tests/requirements.txt -r seed/requirements.txt
+      - name: Run unit tests
+        run: pytest tests/unit
