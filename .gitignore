@@ -8,7 +8,9 @@ logs/
 logs/dag_processor_manager/*.log
 .log
 xl.meta
-__pycache__/*.pyc
+__pycache__/
+*.pyc
+.pytest_cache/
 .DS_Store
 *.ipynb
 dags/.DS_Store
