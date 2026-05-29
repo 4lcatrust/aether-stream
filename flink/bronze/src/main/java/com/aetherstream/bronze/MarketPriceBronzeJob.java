@@ -2,6 +2,7 @@ package com.aetherstream.bronze;
 import com.aetherstream.bronze.model.MarketPriceBronze;
 import com.aetherstream.bronze.util.DebeziumParser;
 import com.aetherstream.bronze.util.ClickHouseJsonUtil;
+import com.aetherstream.bronze.util.DeadLetterUtil;
 import com.aetherstream.bronze.sink.ClickHouseHttpSink;
 import org.apache.flink.api.common.eventtime.WatermarkStrategy;
 import org.apache.flink.api.common.serialization.SimpleStringSchema;
@@ -11,6 +12,10 @@ import org.apache.flink.core.fs.Path;
 import org.apache.flink.formats.parquet.avro.ParquetAvroWriters;
 import org.apache.flink.streaming.api.CheckpointingMode;
 import org.apache.flink.streaming.api.datastream.DataStream;
+import org.apache.flink.streaming.api.datastream.SingleOutputStreamOperator;
+import org.apache.flink.streaming.api.functions.ProcessFunction;
+import org.apache.flink.util.Collector;
+import org.apache.flink.util.OutputTag;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.streaming.api.functions.sink.filesystem.OutputFileConfig;
 import org.apache.flink.streaming.api.functions.sink.filesystem.StreamingFileSink;
@@ -34,6 +39,8 @@ public class MarketPriceBronzeJob {
     private static final String BRONZE_AVRO_TOPIC = "bronze.market_prices.avro";
     private static final String SCHEMA_REGISTRY_URL = "http://schema-registry:8081";
     private static final String SR_SUBJECT_MARKET_PRICES = BRONZE_AVRO_TOPIC + "-value";
+    private static final String DLQ_TOPIC = "bronze.market_prices.dlq";
+    private static final OutputTag<String> DLQ_TAG = new OutputTag<String>("dead-letter") {};
     private static final ZoneId JAKARTA = ZoneId.of("Asia/Jakarta");
     public static void main(String[] args) throws Exception {
         final StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
@@ -61,18 +68,50 @@ public class MarketPriceBronzeJob {
                                 )
                         )
                         .build();
-        // ===== transform Debezium -> Bronze
-        final DataStream<MarketPriceBronze> bronze =
+        // ===== transform Debezium -> Bronze (rejects routed to a side output)
+        final SingleOutputStreamOperator<MarketPriceBronze> parsed =
                 env.fromSource(source, WatermarkStrategy.noWatermarks(), "kafka-cdc")
-                        .map(DebeziumParser::parseMarketPrice)
-                        .filter(e -> e != null)
-                        .map(out -> {
+                        .process(new ProcessFunction<GenericRecord, MarketPriceBronze>() {
+                            @Override
+                            public void processElement(GenericRecord record, Context ctx,
+                                                       Collector<MarketPriceBronze> out) {
+                                try {
+                                    MarketPriceBronze parsed = DebeziumParser.parseMarketPrice(record);
+                                    if (parsed == null) {
+                                        ctx.output(DLQ_TAG, DeadLetterUtil.format(
+                                                "null or unsupported record", record));
+                                    } else {
+                                        out.collect(parsed);
+                                    }
+                                } catch (Exception e) {
+                                    ctx.output(DLQ_TAG, DeadLetterUtil.format(e.toString(), record));
+                                }
+                            }
+                        })
+                        .returns(MarketPriceBronze.class)
+                        .name("parse-debezium");
+
+        final DataStream<MarketPriceBronze> bronze =
+                parsed.map(out -> {
                             final ZonedDateTime now = ZonedDateTime.now(JAKARTA);
                             out.setIngestionDate(now.toLocalDate().toString());
                             out.setIngestionHour(String.format("%02d", now.getHour()));
                             return out;
                         })
-                        .name("parse-debezium-and-enrich");
+                        .name("enrich");
+
+        // ===== dead-letter sink (rejected records)
+        final KafkaSink<String> dlqSink =
+                KafkaSink.<String>builder()
+                        .setBootstrapServers("kafka:9092")
+                        .setRecordSerializer(
+                                KafkaRecordSerializationSchema.<String>builder()
+                                        .setTopic(DLQ_TOPIC)
+                                        .setValueSerializationSchema(new SimpleStringSchema())
+                                        .build()
+                        )
+                        .build();
+        parsed.getSideOutput(DLQ_TAG).sinkTo(dlqSink).name("dead-letter-kafka");
         // ===== debug
         bronze.map(ClickHouseJsonUtil::toJson).name("debug-json").print();
         // ===== Kafka sink (Avro + Schema Registry)

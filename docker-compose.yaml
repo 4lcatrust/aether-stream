@@ -152,6 +152,8 @@ services:
       kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic aether_pg.public.market_caps --partitions 1 --replication-factor 1;
       kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic bronze.market_prices.avro --partitions 1 --replication-factor 1;
       kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic bronze.market_caps.avro --partitions 1 --replication-factor 1;
+      kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic bronze.market_prices.dlq --partitions 1 --replication-factor 1;
+      kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic bronze.market_caps.dlq --partitions 1 --replication-factor 1;
       echo 'Topic ready';
       "
     networks:
