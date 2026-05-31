@@ -112,8 +112,6 @@ public class MarketPriceBronzeJob {
                         )
                         .build();
         parsed.getSideOutput(DLQ_TAG).sinkTo(dlqSink).name("dead-letter-kafka");
-        // ===== debug
-        bronze.map(ClickHouseJsonUtil::toJson).name("debug-json").print();
         // ===== Kafka sink (Avro + Schema Registry)
         final KafkaSink<MarketPriceBronze> avroKafkaSink =
                 KafkaSink.<MarketPriceBronze>builder()
